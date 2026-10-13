@@ -1,0 +1,2527 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saldos y Remates DECAR v2.0 - Punto de Venta Pachuca</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @media print {
+            @page { size: 80mm auto; margin: 0mm; }
+            body * { visibility: hidden !important; }
+            #area-impresion, #area-impresion *, #area-impresion-etiqueta, #area-impresion-etiqueta * { visibility: visible !important; }
+            #area-impresion {
+                display: block !important;
+                position: absolute !important;
+                left: 0 !important; top: 0 !important;
+                width: 78mm !important; margin: 0 !important; padding: 4mm !important;
+                font-family: 'Courier New', Courier, monospace !important; font-size: 11px !important;
+                color: #000 !important; background: #fff !important;
+            }
+            #area-impresion-etiqueta {
+                display: block !important;
+                position: absolute !important;
+                left: 0 !important; top: 0 !important;
+                width: 58mm !important; margin: 0 !important; padding: 2mm !important;
+                text-align: center !important; background: #fff !important;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col font-sans overflow-hidden">
+
+    <!-- ÁREAS DE IMPRESIÓN DIRECTA -->
+    <div id="area-impresion" style="display:none;"></div>
+    <div id="area-impresion-etiqueta" style="display:none;"></div>
+
+    <!-- HEADER -->
+    <header class="bg-gray-900 text-white px-6 py-3 flex justify-between items-center shadow-md relative z-10">
+        <div>
+            <h2 class="text-xl font-bold">DECAR POS v2.0 - Mueblería</h2>
+            <p class="text-xs text-gray-400">Punto de Venta Pachuca</p>
+        </div>
+        <div class="flex items-center space-x-4">
+            <button onclick="abrirModalLogin()" id="user-display" class="bg-gray-800 hover:bg-gray-700 px-4 py-1.5 rounded-full text-sm font-semibold border border-gray-700 text-yellow-400 flex items-center space-x-2">
+                <span>👤 Identificarse...</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- NAVEGACIÓN PRINCIPAL -->
+    <nav class="bg-white border-b border-gray-200 px-6 flex space-x-4 shadow-sm relative z-10">
+        <button onclick="cambiarTab('caja')" id="tab-caja" class="py-3 px-4 text-blue-600 border-b-2 border-blue-600 font-bold focus:outline-none">Punto de Venta</button>
+        <button onclick="cambiarTab('inventario')" id="tab-inventario" class="py-3 px-4 text-gray-500 font-bold border-b-2 border-transparent focus:outline-none">Inventario / Excel</button>
+        <button onclick="cambiarTab('devoluciones')" id="tab-devoluciones" class="py-3 px-4 text-gray-500 font-bold border-b-2 border-transparent focus:outline-none">Devoluciones / Garantías</button>
+        <button onclick="cambiarTab('apartados')" id="tab-apartados" class="py-3 px-4 text-gray-500 font-bold border-b-2 border-transparent focus:outline-none">Apartados</button>
+        <button onclick="cambiarTab('gastos')" id="tab-gastos" class="py-3 px-4 text-gray-500 font-bold border-b-2 border-transparent focus:outline-none">Caja Chica / Gastos</button>
+        <button onclick="cambiarTab('reportes')" id="tab-reportes" class="py-3 px-4 text-gray-500 font-bold border-b-2 border-transparent focus:outline-none">Reportes Financieros</button>
+    </nav>
+
+    <!-- MAIN -->
+    <main id="main-content" class="flex-1 p-6 overflow-y-auto relative z-0 filter blur-none transition duration-500">
+
+        <!-- PUNTO DE VENTA -->
+        <section id="sec-caja" class="grid grid-cols-12 gap-6 h-full">
+            <div class="col-span-8 bg-white p-6 rounded-xl shadow border flex flex-col">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-bold text-gray-800">Catálogo / Escáner de Productos</h3>
+                    <button onclick="abrirModalHistorialVentas('pos')" class="bg-gray-800 text-white font-bold px-3 py-1.5 rounded text-xs hover:bg-black">
+                        🔍 Historial y Reimpresión
+                    </button>
+                </div>
+                <input type="text" id="buscar-producto" onkeyup="filtrarCatalogoPOS(event)" placeholder="Escanear con Pistola o teclear SKU, nombre, marca..." class="w-full px-4 py-2 border-2 border-blue-500 rounded-lg mb-4 text-sm font-semibold bg-yellow-50 focus:bg-white transition">
+                <div class="flex-1 overflow-y-auto max-h-[420px]">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-gray-50 uppercase sticky top-0 font-bold text-gray-700 border-b">
+                            <tr>
+                                <th class="p-2">SKU</th>
+                                <th class="p-2">Descripción</th>
+                                <th class="p-2">Marca</th>
+                                <th class="p-2">Capacidad</th>
+                                <th class="p-2">PVP</th>
+                                <th class="p-2">Stock</th>
+                                <th class="p-2 text-center">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-productos-pos" class="divide-y divide-gray-100 font-medium"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="col-span-4 bg-white p-6 rounded-xl shadow border flex flex-col justify-between">
+                <div>
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="text-lg font-bold text-gray-800">Detalle del Cobro</h3>
+                        <div class="flex items-center space-x-1">
+                            <label class="text-xs font-bold text-gray-600">Tipo:</label>
+                            <select id="tipo-venta-select" onchange="renderCarrito()" class="p-1 border rounded text-xs font-bold bg-gray-50">
+                                <option value="Menudeo">Público (PVP)</option>
+                                <option value="Mayoreo">Mayoreo (PVM)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2 mb-2 bg-gray-50 p-2 rounded border text-xs">
+                        <input type="text" id="pos-cliente-nombre" placeholder="Cliente (Opcional)" class="p-1 border rounded">
+                        <input type="text" id="pos-cliente-telefono" placeholder="Teléfono" class="p-1 border rounded">
+                    </div>
+
+                    <div class="mb-3 bg-blue-50 p-2 rounded border border-blue-200 text-xs">
+                        <label class="font-bold text-blue-900 block mb-1">Origen de la Venta (Comisiones):</label>
+                        <select id="pos-tipo-atencion" class="w-full p-1.5 border rounded font-bold bg-white text-gray-800">
+                            <option value="VendedorTienda">Vendedor Físico en Tienda (2%)</option>
+                            <option value="Comisionista">Comisionista Externo / Redes (2%)</option>
+                        </select>
+                    </div>
+
+                    <div id="carrito-items" class="space-y-2 mb-4 max-h-[180px] overflow-y-auto border p-2 rounded bg-white"></div>
+                </div>
+
+                <div class="border-t pt-3 space-y-2">
+                    <div class="flex justify-between text-xl font-bold"><span>Total:</span><span id="total-cobro" class="text-blue-600">$0.00</span></div>
+                    <div class="grid grid-cols-3 gap-1 text-xs">
+                        <div><label>Efectivo</label><input type="number" id="pago-efectivo" value="0" min="0" step="0.5" class="w-full p-1 border rounded font-bold"></div>
+                        <div><label>Tarjeta</label><input type="number" id="pago-tarjeta" value="0" min="0" step="0.5" class="w-full p-1 border rounded font-bold"></div>
+                        <div><label>Transfer.</label><input type="number" id="pago-transf" value="0" min="0" step="0.5" class="w-full p-1 border rounded font-bold"></div>
+                    </div>
+                    <button onclick="procesarCobro()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg text-lg">Cobrar e Imprimir Ticket</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- INVENTARIO -->
+        <section id="sec-inventario" class="hidden bg-white p-6 rounded-xl shadow border">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-gray-800">Gestión de Inventario - Pachuca</h3>
+                <div class="flex space-x-2">
+                    <button onclick="window.location.href='/sistema/descargar-bd/';" class="bg-indigo-700 text-white font-bold px-3 py-1.5 rounded text-xs shadow">⬇ Descargar Respaldo BD a mi PC</button>
+                    <button onclick="abrirModalPegarExcel()" class="bg-purple-700 hover:bg-purple-800 text-white font-bold px-3 py-1.5 rounded text-xs shadow">📋 Carga Masiva (Copiar/Pegar Excel)</button>
+                    <button onclick="abrirModalIndividual()" class="bg-blue-600 text-white font-bold px-3 py-1.5 rounded text-xs">+ Cargar Producto Individual</button>
+                    <button onclick="limpiarTodoElSistema()" class="bg-red-700 hover:bg-black text-white font-bold px-3 py-1.5 rounded text-xs shadow">
+                        🔒 Vaciar e Iniciar Sistema Limpio (Req. PIN Maestro)
+                    </button>
+                </div>
+            </div>
+
+            <div class="p-4 bg-blue-50 border border-blue-200 rounded-lg mb-4 flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-semibold text-blue-900">Importar Productos desde Excel (.xlsx)</p>
+                    <p class="text-xs text-blue-700">Conserva y protege automáticamente los apartados activos.</p>
+                </div>
+                <div class="flex space-x-2">
+                    <input type="file" id="archivo-excel" accept=".xlsx, .csv" class="text-xs">
+                    <button onclick="subirExcel()" class="bg-green-600 hover:bg-green-700 text-white font-bold px-3 py-1.5 rounded text-xs">Cargar Excel</button>
+                    <button onclick="descargarExcelInventario()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded text-xs">Descargar Excel</button>
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <input type="text" id="inventario-buscar-input" onkeyup="filtrarTablaInventario()" placeholder="Escribe SKU, nombre, marca o capacidad para filtrar en vivo..." class="w-full p-2 border rounded text-xs font-semibold focus:border-blue-500">
+            </div>
+
+            <div class="overflow-x-auto max-h-[350px]">
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-gray-100 uppercase sticky top-0 font-bold">
+                        <tr>
+                            <th class="p-2">SKU</th>
+                            <th class="p-2">TIPO</th>
+                            <th class="p-2">DESCRIPCION</th>
+                            <th class="p-2">MARCA</th>
+                            <th class="p-2">CAPACIDAD</th>
+                            <th class="p-2">U/M</th>
+                            <th class="p-2">OBSERVACIONES</th>
+                            <th id="th-costo-header" class="p-2 bg-yellow-100 text-yellow-900">PRECIO COMPRA</th>
+                            <th class="p-2">PVM</th>
+                            <th class="p-2">PMVM</th>
+                            <th class="p-2">PVP</th>
+                            <th class="p-2">PMVP</th>
+                            <th class="p-2">STOCK</th>
+                            <th class="p-2 bg-amber-100 text-amber-900">Apartado (Físico)</th>
+                            <th class="p-2 bg-red-100 text-red-900">En Garantía / Taller</th>
+                            <th class="p-2 text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-inventario-completo" class="divide-y font-medium"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- DEVOLUCIONES -->
+        <section id="sec-devoluciones" class="hidden bg-white p-6 rounded-xl shadow border">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-gray-800">Procesar Garantía o Devolución</h3>
+                <button onclick="abrirModalHistorialDevoluciones()" class="bg-indigo-700 hover:bg-indigo-900 text-white font-bold px-3 py-1.5 rounded text-xs shadow flex items-center space-x-1">
+                    <span>📜 Histórico de Devoluciones</span>
+                </button>
+            </div>
+            
+            <div class="grid grid-cols-12 gap-6">
+                <div class="col-span-5 border p-4 rounded-lg bg-gray-50">
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="font-bold text-xs block">Buscar Venta Original</label>
+                        <button onclick="abrirModalHistorialVentas('devolucion')" class="bg-gray-800 text-white font-bold px-2 py-1 rounded text-[10px] hover:bg-black">
+                            🔍 Historial Ventas
+                        </button>
+                    </div>
+                    <div class="flex space-x-2 mb-3">
+                        <input type="text" id="dev-buscar-folio" placeholder="TICK-000001..." class="w-full p-2 border rounded text-xs font-mono font-bold">
+                        <button onclick="buscarVentaParaDevolucion()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1 rounded text-xs">Buscar</button>
+                    </div>
+                    <div id="dev-venta-info" class="hidden mt-4 space-y-2 text-xs border-t pt-2">
+                        <p id="dev-info-folio" class="font-bold text-blue-700 text-sm"></p>
+                        <p id="dev-info-cliente" class="text-gray-600 font-semibold"></p>
+                        <p class="font-bold text-gray-800 mt-2">Haz clic en el mueble a devolver:</p>
+                        <div id="dev-info-items" class="space-y-1 max-h-[150px] overflow-y-auto"></div>
+                    </div>
+                </div>
+
+                <div class="col-span-7 border p-4 rounded-lg">
+                    <div id="dev-tarjeta-articulo" class="hidden bg-blue-50 border border-blue-300 p-3 rounded mb-4 text-xs">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p id="dev-card-nombre" class="font-bold text-gray-800 text-sm"></p>
+                                <p id="dev-card-sku" class="font-mono text-gray-500"></p>
+                            </div>
+                            <button onclick="cancelarSeleccionDevolucion()" class="bg-red-100 hover:bg-red-200 text-red-700 font-bold px-2 py-1 rounded border text-[10px]">
+                                ✕ Limpiar Selección
+                            </button>
+                        </div>
+                    </div>
+
+                    <form onsubmit="event.preventDefault(); procesarDevolucion();" class="space-y-3 text-xs">
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="font-bold">Acción</label>
+                                <select id="dev-tipo-select" class="w-full p-2 border rounded font-bold bg-yellow-50">
+                                    <option value="Devolucion/Dinero">Devolución de Dinero (Reembolso)</option>
+                                    <option value="Reparacion/Garantia">Garantía / Reparación (Sin Dinero)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="font-bold">Estado Mueble</label>
+                                <select id="dev-estado-select" class="w-full p-2 border rounded font-bold bg-blue-50">
+                                    <option value="GarantiaTaller">🔴 Con Falla (Ingresa a Garantía / Taller)</option>
+                                    <option value="VentaInmediata">🟢 Sin Falla (Venta Inmediata)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="font-bold">Motivo</label>
+                            <input type="text" id="dev-motivo" placeholder="Ej. Defecto técnico de fábrica" required class="w-full p-2 border rounded">
+                        </div>
+
+                        <button type="submit" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded text-sm shadow">
+                            Emitir Ticket de Devolución / Garantía
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- APARTADOS -->
+        <section id="sec-apartados" class="hidden grid grid-cols-12 gap-6 h-full">
+            <div class="col-span-8 bg-white p-6 rounded-xl shadow border flex flex-col">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-bold text-gray-800">Catálogo de Productos para Apartado</h3>
+                    <div class="flex space-x-2">
+                        <button onclick="exportarApartadosExcel('todos')" class="bg-green-700 hover:bg-green-800 text-white font-bold px-2.5 py-1.5 rounded text-xs shadow">
+                            📊 Exportar Todo Excel
+                        </button>
+                        <button onclick="exportarApartadosExcel('pendientes')" class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold px-2.5 py-1.5 rounded text-xs shadow">
+                            ⏳ Exportar Pendientes Excel
+                        </button>
+                        <button onclick="abrirModalHistorialApartados()" class="bg-blue-800 text-white font-bold px-3 py-1.5 rounded text-xs hover:bg-black shadow">
+                            🔍 Histórico y Registro de Abonos
+                        </button>
+                    </div>
+                </div>
+                <input type="text" id="buscar-producto-apartado" onkeyup="filtrarCatalogoApartados(event)" placeholder="Escanear con Pistola o teclear SKU, descripción..." class="w-full px-4 py-2 border-2 border-blue-500 rounded-lg mb-4 text-sm font-semibold bg-yellow-50 focus:bg-white transition">
+                <div class="flex-1 overflow-y-auto max-h-[420px]">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-gray-50 uppercase sticky top-0 font-bold">
+                            <tr>
+                                <th class="p-3">SKU</th>
+                                <th class="p-3">Descripción</th>
+                                <th class="p-3">Marca</th>
+                                <th class="p-3">Capacidad</th>
+                                <th class="p-3">PVP</th>
+                                <th class="p-3">Stock Venta</th>
+                                <th class="p-3 text-center">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-productos-apartado-body" class="divide-y divide-gray-100"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="col-span-4 bg-white p-6 rounded-xl shadow border flex flex-col justify-between">
+                <div>
+                    <h3 class="text-lg font-bold text-gray-800 mb-3">Detalle del Apartado</h3>
+
+                    <div class="grid grid-cols-2 gap-2 mb-2 bg-gray-50 p-2 rounded border text-xs">
+                        <input type="text" id="apt-cliente" placeholder="Cliente *" required class="p-1 border rounded font-semibold">
+                        <input type="text" id="apt-telefono" placeholder="Teléfono *" required class="p-1 border rounded font-semibold">
+                    </div>
+
+                    <div class="mb-3 bg-blue-50 p-2 rounded border border-blue-200 text-xs">
+                        <label class="font-bold text-blue-900 block mb-1">Origen de la Venta (Comisiones):</label>
+                        <select id="apt-tipo-atencion" class="w-full p-1.5 border rounded font-bold bg-white text-gray-800">
+                            <option value="VendedorTienda">Vendedor Físico en Tienda (2%)</option>
+                            <option value="Comisionista">Comisionista Externo / Redes (2%)</option>
+                        </select>
+                    </div>
+
+                    <p class="font-bold text-gray-700 text-xs mb-1">Muebles seleccionados:</p>
+                    <div id="apt-carrito-items" class="space-y-2 mb-4 max-h-[140px] overflow-y-auto border p-2 rounded bg-white"></div>
+                </div>
+
+                <div class="border-t pt-3 space-y-2">
+                    <div class="flex justify-between text-lg font-bold">
+                        <span>Total Muebles:</span>
+                        <span id="apt-total-muebles" class="text-blue-600">$0.00</span>
+                    </div>
+
+                    <p class="text-xs font-bold text-gray-700">Abono Inicial / Enganche:</p>
+                    <div class="grid grid-cols-3 gap-1 text-xs">
+                        <div><label>Efectivo</label><input type="number" id="apt-pago-efec" value="0" min="0" step="0.5" class="w-full p-1 border rounded font-bold"></div>
+                        <div><label>Tarjeta</label><input type="number" id="apt-pago-tarj" value="0" min="0" step="0.5" class="w-full p-1 border rounded font-bold"></div>
+                        <div><label>Transfer.</label><input type="number" id="apt-pago-trans" value="0" min="0" step="0.5" class="w-full p-1 border rounded font-bold"></div>
+                    </div>
+
+                    <button onclick="procesarApartado()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg text-base shadow">
+                        Registrar Apartado y Congelar Stock
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- CAJA CHICA Y GASTOS -->
+        <section id="sec-gastos" class="hidden space-y-6">
+            <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow border">
+                <div>
+                    <h3 class="text-lg font-bold text-gray-800">Caja Chica y Control de Gastos</h3>
+                    <p class="text-xs text-gray-500">Corte contable acumulado y cálculo automático de comisiones</p>
+                </div>
+                <div class="flex space-x-2">
+                    <button onclick="cargarResumenGastos('diario')" id="btn-gasto-diario" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">Diario</button>
+                    <button onclick="cargarResumenGastos('semanal')" id="btn-gasto-semanal" class="px-3 py-1.5 rounded text-xs font-bold bg-blue-600 text-white">Semanal</button>
+                    <button onclick="cargarResumenGastos('mensual')" id="btn-gasto-mensual" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">Mensual</button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-4 gap-4">
+                <div class="bg-blue-50 border border-blue-200 p-4 rounded-xl text-center">
+                    <p class="text-[11px] text-blue-800 font-bold uppercase">Apertura Caja Chica</p>
+                    <p id="card-caja-inicial" class="text-2xl font-extrabold text-blue-900 mt-1">$0.00</p>
+                </div>
+
+                <div class="bg-amber-50 border border-amber-200 p-4 rounded-xl text-center">
+                    <p class="text-[11px] text-amber-900 font-bold uppercase">Comisión Vendedor Tienda (2%)</p>
+                    <p id="card-comision-vendedor" class="text-2xl font-extrabold text-amber-900 mt-1">$0.00</p>
+                    <p class="text-[10px] text-amber-700 mt-0.5">Calculado automáticamente</p>
+                </div>
+
+                <div class="bg-purple-50 border border-purple-200 p-4 rounded-xl text-center">
+                    <p class="text-[11px] text-purple-900 font-bold uppercase">Comisión Redes / Comisionista (2%)</p>
+                    <p id="card-comision-comisionista" class="text-2xl font-extrabold text-purple-900 mt-1">$0.00</p>
+                    <p class="text-[10px] text-purple-700 mt-0.5">Calculado automáticamente</p>
+                </div>
+
+                <div class="bg-red-50 border border-red-200 p-4 rounded-xl text-center">
+                    <p class="text-[11px] text-red-900 font-bold uppercase">Total Egresos Reales</p>
+                    <p id="card-total-egresos" class="text-2xl font-extrabold text-red-900 mt-1">$0.00</p>
+                    <p class="text-[10px] text-red-700 mt-0.5">Gastos + Comisiones</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-12 gap-6">
+                <div class="col-span-5 space-y-6">
+                    <div class="bg-white p-5 rounded-xl shadow border">
+                        <h4 class="font-bold text-gray-800 text-sm mb-3">Apertura de Caja Chica</h4>
+                        <div class="flex space-x-2">
+                            <input type="number" id="caja-monto" placeholder="Monto Inicial ($)" class="w-full p-2 border rounded font-bold text-xs">
+                            <button onclick="abrirCajaChica()" class="bg-blue-600 text-white font-bold px-4 py-2 rounded text-xs hover:bg-blue-700 shadow">Abrir</button>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-xl shadow border">
+                        <h4 class="font-bold text-gray-800 text-sm mb-3">Registrar Gasto de Tienda / Nómina</h4>
+                        <form onsubmit="event.preventDefault(); registrarGasto();" class="space-y-3 text-xs">
+                            <div class="grid grid-cols-2 gap-2">
+                                <select id="gasto-categoria" class="p-2 border rounded font-bold bg-gray-50">
+                                    <option value="Sueldo Semanal">Sueldo Semanal (Nómina)</option>
+                                    <option value="Comisiones">Comisiones (Pago / Corte)</option>
+                                    <option value="Gasolina">Gasolina / Transporte</option>
+                                    <option value="Playo/Empaque">Playo / Empaque</option>
+                                    <option value="Limpieza">Insumos Limpieza</option>
+                                    <option value="Otros">Otros Gastos</option>
+                                </select>
+                                <input type="date" id="gasto-fecha" class="p-2 border rounded font-bold">
+                            </div>
+                            <input type="text" id="gasto-concepto" placeholder="Descripción del gasto / colaborador" required class="w-full p-2 border rounded">
+                            <input type="number" id="gasto-monto" placeholder="Monto Pagado ($)" required class="w-full p-2 border rounded font-bold">
+                            <button type="submit" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded text-xs shadow">Guardar Registro de Gasto</button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="col-span-7 bg-white p-5 rounded-xl shadow border">
+                    <h4 class="font-bold text-gray-800 text-sm mb-3">Histórico de Gastos Registrados</h4>
+                    <div class="overflow-y-auto max-h-[350px]">
+                        <table class="w-full text-left text-xs">
+                            <thead class="bg-gray-100 font-bold sticky top-0">
+                                <tr>
+                                    <th class="p-2">Fecha</th>
+                                    <th class="p-2">Categoría</th>
+                                    <th class="p-2">Concepto</th>
+                                    <th class="p-2 text-right">Monto ($)</th>
+                                    <th class="p-2 text-center">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabla-gastos-body" class="divide-y"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- REPORTES FINANCIEROS DIVIDIDOS DINÁMICOS -->
+        <section id="sec-reportes" class="hidden space-y-6">
+            <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow border">
+                <div>
+                    <h3 class="text-xl font-bold text-gray-800">Módulo de Reportes Financieros</h3>
+                    <p class="text-xs text-gray-500">Conciliación operativa de caja y análisis estratégico de rentabilidad BI</p>
+                </div>
+                <div class="flex space-x-2">
+                    <button onclick="cambiarSubVistaReporte('arqueo')" id="btn-sub-arqueo" class="px-4 py-2 rounded text-xs font-bold bg-blue-600 text-white shadow">
+                        1. Arqueo y Conciliación de Caja
+                    </button>
+                    <button onclick="cambiarSubVistaReporte('rentabilidad')" id="btn-sub-rentabilidad" class="px-4 py-2 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-purple-100">
+                        2. Análisis BI / Ganancias Maestro 🔒
+                    </button>
+                </div>
+            </div>
+
+            <!-- SUB-VISTA 1: ARQUEO OPERATIVO Y CONCILIACIÓN DE CAJA -->
+            <div id="sub-reporte-arqueo" class="space-y-6">
+                <div class="flex justify-between items-center bg-gray-50 p-3 rounded-lg border">
+                    <span class="text-xs font-bold text-gray-700">Filtro de Arqueo Operativo:</span>
+                    <div class="flex space-x-2">
+                        <button onclick="cargarReporteArqueo('diario')" id="btn-arq-diario" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">Diario</button>
+                        <button onclick="cargarReporteArqueo('semanal')" id="btn-arq-semanal" class="px-3 py-1 rounded text-xs font-bold bg-blue-600 text-white">Semanal (Lunes a Domingo)</button>
+                        <button onclick="cargarReporteArqueo('mensual')" id="btn-arq-mensual" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">Mensual</button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-4 text-xs font-bold">
+                    <div onclick="mostrarTablaSubReporte('ventas')" class="bg-blue-50 border border-blue-200 p-4 rounded-xl text-center space-y-1 cursor-pointer hover:bg-blue-100 transition shadow-sm">
+                        <p class="text-blue-900 uppercase">A) REPORTE VENTAS DIRECTAS</p>
+                        <p id="rep-a-ventas-total" class="text-xl font-extrabold text-blue-900">$0.00</p>
+                        <p id="rep-a-ventas-desglose" class="text-[10px] text-blue-700 font-normal">Efec: $0 | Tarj: $0 | Trans: $0</p>
+                        <p class="text-[9px] text-blue-500 mt-2">👆 Clic para ver desglose en tabla</p>
+                    </div>
+                    <div onclick="mostrarTablaSubReporte('devoluciones')" class="bg-red-50 border border-red-200 p-4 rounded-xl text-center space-y-1 cursor-pointer hover:bg-red-100 transition shadow-sm">
+                        <p class="text-red-900 uppercase">B) REPORTE DEVOLUCIONES</p>
+                        <p id="rep-b-dev-total" class="text-xl font-extrabold text-red-900">$0.00</p>
+                        <p id="rep-b-dev-num" class="text-[10px] text-red-700 font-normal">0 Devoluciones Registradas</p>
+                        <p class="text-[9px] text-red-500 mt-2">👆 Clic para ver desglose en tabla</p>
+                    </div>
+                    <div onclick="mostrarTablaSubReporte('apartados')" class="bg-green-50 border border-green-200 p-4 rounded-xl text-center space-y-1 cursor-pointer hover:bg-green-100 transition shadow-sm">
+                        <p class="text-green-900 uppercase">C) REPORTE APARTADOS Y ABONOS</p>
+                        <p id="rep-c-apt-total" class="text-xl font-extrabold text-green-900">$0.00</p>
+                        <p id="rep-c-apt-desglose" class="text-[10px] text-green-700 font-normal">Efec: $0 | Tarj: $0 | Trans: $0</p>
+                        <p class="text-[9px] text-green-600 mt-2">👆 Clic para ver desglose en tabla</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-4 gap-4">
+                    <div class="bg-emerald-50 border border-emerald-200 p-4 rounded-xl text-center">
+                        <p class="text-[11px] text-emerald-800 font-bold uppercase">Ingresos en Efectivo</p>
+                        <p id="arq-card-efectivo-ingresado" class="text-2xl font-extrabold text-emerald-900 mt-1">$0.00</p>
+                    </div>
+                    <div class="bg-red-50 border border-red-200 p-4 rounded-xl text-center">
+                        <p class="text-[11px] text-red-800 font-bold uppercase">Egresos / Gastos Efectivo</p>
+                        <p id="arq-card-gastos" class="text-2xl font-extrabold text-red-900 mt-1">$0.00</p>
+                    </div>
+                    <div class="bg-blue-50 border-2 border-blue-400 p-4 rounded-xl text-center">
+                        <p class="text-[11px] text-blue-900 font-bold uppercase">EFECTIVO NETO A ENTREGAR EN CAJA</p>
+                        <p id="arq-card-efectivo-neto" class="text-2xl font-extrabold text-blue-900 mt-1">$0.00</p>
+                    </div>
+                    <div class="bg-gray-50 border border-gray-200 p-4 rounded-xl text-center">
+                        <p class="text-[11px] text-gray-700 font-bold uppercase">Cobros Tarjeta + Transf.</p>
+                        <p id="arq-card-digital" class="text-2xl font-extrabold text-gray-800 mt-1">$0.00</p>
+                    </div>
+                </div>
+
+                <div id="contenedor-tabla-ventas" class="bg-white p-5 rounded-xl shadow border">
+                    <h4 class="font-bold text-blue-900 text-sm mb-3 border-b pb-2">A) Reporte de Ventas Directas por Periodo</h4>
+                    <div class="overflow-x-auto max-h-[300px]">
+                        <table class="w-full text-left text-xs border-collapse">
+                            <thead class="sticky top-0">
+                                <tr class="bg-gray-100 font-bold border-b">
+                                    <th class="p-2.5 border">DÍA</th>
+                                    <th class="p-2.5 border">FECHA</th>
+                                    <th class="p-2.5 border bg-emerald-50 text-emerald-900">MONTO VENTA</th>
+                                    <th class="p-2.5 border">EFECTIVO</th>
+                                    <th class="p-2.5 border">TRANSFERENCIA</th>
+                                    <th class="p-2.5 border">TARJETA</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabla-arqueo-semanal-body" class="divide-y font-medium"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="contenedor-tabla-devoluciones" class="hidden bg-white p-5 rounded-xl shadow border">
+                    <h4 class="font-bold text-red-900 text-sm mb-3 border-b pb-2">B) Reporte de Devoluciones y Reembolsos</h4>
+                    <div class="overflow-x-auto max-h-[300px]">
+                        <table class="w-full text-left text-xs border-collapse">
+                            <thead class="sticky top-0">
+                                <tr class="bg-red-50 font-bold border-b text-red-900">
+                                    <th class="p-2.5 border">FOLIO DEV</th>
+                                    <th class="p-2.5 border">FECHA</th>
+                                    <th class="p-2.5 border">SKU MUEBLE</th>
+                                    <th class="p-2.5 border">MONTO REEMBOLSADO</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabla-reporte-devoluciones-body" class="divide-y font-medium"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="contenedor-tabla-apartados" class="hidden bg-white p-5 rounded-xl shadow border">
+                    <h4 class="font-bold text-green-900 text-sm mb-3 border-b pb-2">C) Reporte de Abonos y Apartados Recibidos</h4>
+                    <div class="overflow-x-auto max-h-[300px]">
+                        <table class="w-full text-left text-xs border-collapse">
+                            <thead class="sticky top-0">
+                                <tr class="bg-green-50 font-bold border-b text-green-900">
+                                    <th class="p-2.5 border">FOLIO APARTADO</th>
+                                    <th class="p-2.5 border">FECHA ABONO</th>
+                                    <th class="p-2.5 border">MÉTODO PAGO</th>
+                                    <th class="p-2.5 border">MONTO RECIBIDO</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabla-reporte-apartados-body" class="divide-y font-medium"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SUB-VISTA 2: RENTABILIDAD Y BI MAESTRO -->
+            <div id="sub-reporte-rentabilidad" class="hidden space-y-6">
+                <div id="panel-pin-maestro" class="bg-purple-50 border-2 border-purple-300 p-6 rounded-2xl max-w-md mx-auto text-center space-y-3">
+                    <span class="text-3xl">🔒</span>
+                    <h4 class="text-base font-bold text-purple-900">Reporte Exclusivo Administrador Maestro</h4>
+                    <p class="text-xs text-purple-700">Ingresa tu PIN de seguridad para consultar el análisis de COGS, Ganancia Neta Real y ROI%</p>
+                    <input type="password" id="pin-maestro-input" placeholder="Ingresa tu PIN secreto..." class="w-full p-2 border rounded text-center text-lg font-bold font-mono">
+                    <button onclick="validarPinMaestroBI()" class="w-full bg-purple-700 hover:bg-purple-800 text-white font-bold py-2 rounded text-xs shadow">
+                        Desbloquear Reporte de Rentabilidad
+                    </button>
+                </div>
+
+                <div id="panel-contenido-bi" class="hidden space-y-6">
+                    <div class="flex justify-between items-center bg-purple-100 p-3 rounded-lg border border-purple-200">
+                        <span class="text-xs font-bold text-purple-900">Análisis Estratégico de Margen de Ganancia:</span>
+                        <div class="flex space-x-2">
+                            <button onclick="cargarReporteBI('diario')" id="btn-bi-diario" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">Diario</button>
+                            <button onclick="cargarReporteBI('semanal')" id="btn-bi-semanal" class="px-3 py-1 rounded text-xs font-bold bg-purple-700 text-white">Semanal</button>
+                            <button onclick="cargarReporteBI('mensual')" id="btn-bi-mensual" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">Mensual</button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-4 gap-4">
+                        <div class="bg-gray-50 border border-gray-200 p-4 rounded-xl text-center">
+                            <p class="text-[11px] text-gray-700 font-bold uppercase">Inversión COGS (Costo Compra)</p>
+                            <p id="bi-card-cogs" class="text-2xl font-extrabold text-gray-800 mt-1">$0.00</p>
+                        </div>
+                        <div class="bg-emerald-50 border border-emerald-200 p-4 rounded-xl text-center">
+                            <p class="text-[11px] text-emerald-800 font-bold uppercase">Ganancia Bruta (Ventas - COGS)</p>
+                            <p id="bi-card-bruta" class="text-2xl font-extrabold text-emerald-900 mt-1">$0.00</p>
+                        </div>
+                        <div class="bg-purple-50 border-2 border-purple-400 p-4 rounded-xl text-center">
+                            <p class="text-[11px] text-purple-900 font-bold uppercase">GANANCIA NETA REAL LIBRE</p>
+                            <p id="bi-card-neta" class="text-2xl font-extrabold text-purple-900 mt-1">$0.00</p>
+                        </div>
+                        <div class="bg-yellow-50 border border-yellow-200 p-4 rounded-xl text-center">
+                            <p class="text-[11px] text-yellow-900 font-bold uppercase">% Retorno Inversión (ROI)</p>
+                            <p id="bi-card-roi" class="text-2xl font-extrabold text-yellow-900 mt-1">0.0%</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-xl shadow border">
+                        <h4 class="font-bold text-gray-800 text-sm mb-3">Análisis Mueble por Mueble (Rentabilidad y Rotación)</h4>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-gray-100 font-bold sticky top-0">
+                                    <tr>
+                                        <th class="p-2 border">SKU</th>
+                                        <th class="p-2 border">Mueble / Descripción</th>
+                                        <th class="p-2 border text-center">Piezas Vendidas</th>
+                                        <th class="p-2 border text-right">Venta Total ($)</th>
+                                        <th class="p-2 border text-right bg-yellow-50">Inversión COGS ($)</th>
+                                        <th class="p-2 border text-right bg-emerald-50">Ganancia Bruta ($)</th>
+                                        <th class="p-2 border text-center bg-purple-50">% ROI Mueble</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabla-bi-muebles-body" class="divide-y font-medium"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- MODAL PEGAR EXCEL -->
+    <div id="modal-pegar-excel" class="hidden fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-2xl text-xs space-y-3">
+            <h3 class="text-base font-bold text-gray-800">📋 Carga Masiva - Pegar Celdas de Excel</h3>
+            <p class="text-gray-600">Copia tus celdas de Excel con estas columnas en orden:<br><b>SKU | TIPO | DESCRIPCION | MARCA | CAPACIDAD | U/M | OBSERVACIONES | COSTO | PVP | PVM | STOCK</b></p>
+            <textarea id="excel-paste-area" rows="8" placeholder="Pega las celdas directamente aquí con Ctrl+V..." class="w-full p-2 border rounded font-mono bg-gray-50"></textarea>
+            <div class="flex space-x-2 pt-2">
+                <button onclick="cerrarModalPegarExcel()" class="w-1/2 bg-gray-200 py-2 rounded font-bold">Cancelar</button>
+                <button onclick="procesarTextoPegadoExcel()" class="w-1/2 bg-purple-700 text-white py-2 rounded font-bold shadow">Procesar e Importar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL EDITAR PRODUCTO (ADMIN MAESTRO) -->
+    <div id="modal-editar-producto" class="hidden fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-md space-y-3 text-xs">
+            <h3 class="text-base font-bold text-gray-800 border-b pb-2">✏️ Editar Producto (Edición Maestro)</h3>
+            <input type="hidden" id="edit-prod-id">
+            <div><label class="font-bold">Descripción / Nombre:</label><input type="text" id="edit-prod-nombre" class="w-full p-2 border rounded"></div>
+            <div class="grid grid-cols-2 gap-2">
+                <div><label class="font-bold">Tipo:</label><input type="text" id="edit-prod-tipo" class="w-full p-2 border rounded uppercase"></div>
+                <div><label class="font-bold">Marca:</label><input type="text" id="edit-prod-marca" class="w-full p-2 border rounded uppercase"></div>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <div><label class="font-bold">Capacidad:</label><input type="text" id="edit-prod-capacidad" class="w-full p-2 border rounded"></div>
+                <div><label class="font-bold">Unidad Medida:</label><input type="text" id="edit-prod-um" class="w-full p-2 border rounded uppercase"></div>
+            </div>
+            <div><label class="font-bold">Observaciones Saldo:</label><input type="text" id="edit-prod-obs" class="w-full p-2 border rounded"></div>
+            <div class="grid grid-cols-3 gap-2">
+                <div><label class="font-bold">Costo Compra:</label><input type="number" id="edit-prod-costo" class="w-full p-2 border rounded font-bold"></div>
+                <div><label class="font-bold">PVP (Público):</label><input type="number" id="edit-prod-pvp" class="w-full p-2 border rounded font-bold"></div>
+                <div><label class="font-bold">PVM (Mayoreo):</label><input type="number" id="edit-prod-pvm" class="w-full p-2 border rounded"></div>
+            </div>
+            <div><label class="font-bold">Stock Disponible:</label><input type="number" id="edit-prod-stock" class="w-full p-2 border rounded font-bold"></div>
+            <div class="flex space-x-2 pt-2">
+                <button onclick="cerrarModalEditarProducto()" class="w-1/2 bg-gray-200 py-2 rounded font-bold">Cancelar</button>
+                <button onclick="guardarEdicionProducto()" class="w-1/2 bg-green-600 text-white py-2 rounded font-bold shadow">Guardar Cambios</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL EDITAR GASTO (ADMIN MAESTRO) -->
+    <div id="modal-editar-gasto" class="hidden fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-sm space-y-3 text-xs">
+            <h3 class="text-base font-bold text-gray-800 border-b pb-2">✏️ Editar Gasto (Edición Maestro)</h3>
+            <input type="hidden" id="edit-gasto-id">
+            <div><label class="font-bold">Categoría:</label>
+                <select id="edit-gasto-cat" class="w-full p-2 border rounded font-bold">
+                    <option value="Sueldo Semanal">Sueldo Semanal (Nómina)</option>
+                    <option value="Comisiones">Comisiones</option>
+                    <option value="Gasolina">Gasolina / Transporte</option>
+                    <option value="Playo/Empaque">Playo / Empaque</option>
+                    <option value="Limpieza">Insumos Limpieza</option>
+                    <option value="Otros">Otros Gastos</option>
+                </select>
+            </div>
+            <div><label class="font-bold">Concepto:</label><input type="text" id="edit-gasto-concepto" class="w-full p-2 border rounded"></div>
+            <div><label class="font-bold">Monto ($):</label><input type="number" id="edit-gasto-monto" class="w-full p-2 border rounded font-bold"></div>
+            <div class="flex space-x-2 pt-2">
+                <button onclick="cerrarModalEditarGasto()" class="w-1/2 bg-gray-200 py-2 rounded font-bold">Cancelar</button>
+                <button onclick="guardarEdicionGasto()" class="w-1/2 bg-red-600 text-white py-2 rounded font-bold shadow">Guardar Cambios</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL CÓDIGO DE BARRAS -->
+    <div id="modal-codigo-barras" class="hidden fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-sm text-center flex flex-col space-y-4">
+            <div class="flex justify-between items-center border-b pb-2">
+                <h3 class="text-base font-bold text-gray-800">Impresión de Etiqueta SKU</h3>
+                <button onclick="cerrarModalCodigoBarras()" class="text-gray-400 hover:text-red-600 font-bold">✕</button>
+            </div>
+
+            <div id="etiqueta-preview" class="border p-4 rounded-xl bg-gray-50 flex flex-col items-center justify-center space-y-2">
+                <p id="barcode-titulo" class="font-bold text-xs text-gray-800 max-w-[200px] truncate"></p>
+                <img id="barcode-img" src="" alt="Código de Barras" class="max-h-24 max-w-full">
+                <p id="barcode-sku" class="font-mono text-sm font-bold text-gray-900"></p>
+                <p id="barcode-precio" class="font-extrabold text-lg text-blue-700"></p>
+            </div>
+
+            <div class="pt-2 space-y-2">
+                <button onclick="imprimirEtiquetaSKU()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded text-xs shadow flex items-center justify-center space-x-2">
+                    <span>🖨️ Imprimir Etiqueta de Código de Barras</span>
+                </button>
+                <button onclick="cerrarModalCodigoBarras()" class="w-full bg-gray-100 text-gray-600 font-bold py-1.5 rounded text-xs">
+                    Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE LOGIN (FORZADO AL INICIO) -->
+    <div id="modal-login-usuario" class="hidden fixed inset-0 bg-black bg-opacity-80 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-all duration-300">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-sm text-center flex flex-col space-y-4">
+            <div class="flex justify-between items-center border-b pb-2">
+                <h3 class="text-base font-bold text-gray-800">Control de Acceso / Sesión</h3>
+                <button id="btn-cerrar-login-x" onclick="cerrarModalLogin()" class="text-gray-400 hover:text-red-600 font-bold hidden">✕</button>
+            </div>
+
+            <div id="login-info-actual" class="hidden bg-blue-50 border border-blue-200 p-3 rounded-xl text-xs text-left space-y-1">
+                <p class="font-bold text-blue-900">Sesión Activa Actual:</p>
+                <p id="lbl-login-usuario" class="font-bold text-gray-800"></p>
+                <p id="lbl-login-rol" class="text-gray-600"></p>
+            </div>
+
+            <div class="space-y-3 text-xs text-left">
+                <label class="font-bold block text-gray-700">Seleccionar Usuario para Ingresar:</label>
+                <select id="login-user-select" class="w-full p-2 border rounded font-bold bg-gray-50">
+                    <option value="AdminMaestro">AdminMaestro (Administrador Maestro)</option>
+                    <option value="AdminPachuca">AdminPachuca (Administrador de Tienda)</option>
+                    <option value="Vendedor01">Vendedor01 (Vendedor)</option>
+                </select>
+
+                <label class="font-bold block text-gray-700">PIN Credencial de Acceso:</label>
+                <input type="password" id="login-pin-input" placeholder="Ingresa tu PIN secreto..." class="w-full p-2 border rounded font-bold text-center text-lg font-mono">
+            </div>
+
+            <div class="pt-2 space-y-2 border-t">
+                <button onclick="ejecutarInicioSesion()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded text-xs shadow">
+                    🔓 Iniciar Sesión con este Usuario
+                </button>
+                <button onclick="abrirModalCambioPin()" class="w-full bg-purple-50 text-purple-800 border border-purple-200 hover:bg-purple-100 font-bold py-2 rounded text-xs">
+                    🔐 Cambiar mi PIN Secreto
+                </button>
+                <button id="btn-cancelar-login" onclick="cerrarModalLogin()" class="w-full bg-gray-100 text-gray-600 font-bold py-1.5 rounded text-xs hidden">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE CAMBIO PERSONALIZADO DE PIN -->
+    <div id="modal-cambio-pin" class="hidden fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-sm text-center flex flex-col space-y-4">
+            <div class="flex justify-between items-center border-b pb-2">
+                <h3 class="text-base font-bold text-gray-800">Cambiar mi PIN de Seguridad</h3>
+                <button onclick="cerrarModalCambioPin()" class="text-gray-400 hover:text-red-600 font-bold">✕</button>
+            </div>
+
+            <p class="text-xs text-gray-500 text-left">Configura una clave secreta que solo tú conozcas para firmar tus operaciones.</p>
+
+            <div class="space-y-3 text-xs text-left">
+                <div>
+                    <label class="font-bold block text-gray-700">PIN Actual:</label>
+                    <input type="password" id="pin-actual-input" placeholder="PIN Actual" class="w-full p-2 border rounded font-bold text-center font-mono">
+                </div>
+                <div>
+                    <label class="font-bold block text-gray-700">Nuevo PIN Secreto:</label>
+                    <input type="password" id="pin-nuevo-input" placeholder="Nuevo PIN" class="w-full p-2 border rounded font-bold text-center font-mono">
+                </div>
+                <div>
+                    <label class="font-bold block text-gray-700">Confirmar Nuevo PIN:</label>
+                    <input type="password" id="pin-confirmar-input" placeholder="Confirmar PIN" class="w-full p-2 border rounded font-bold text-center font-mono">
+                </div>
+            </div>
+
+            <div class="pt-2 space-y-2">
+                <button onclick="ejecutarCambioPin()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded text-xs shadow">
+                    💾 Guardar Nuevo PIN
+                </button>
+                <button onclick="cerrarModalCambioPin()" class="w-full bg-gray-100 text-gray-600 font-bold py-1.5 rounded text-xs">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL HISTORIAL Y CONSULTA DETALLADA DE VENTA DIRECTA -->
+    <div id="modal-historial-ventas" class="hidden fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[85vh]">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="text-lg font-bold text-gray-800">Histórico General de Ventas y Búsqueda Avanzada</h3>
+                <button onclick="cerrarModalHistorialVentas()" class="font-bold text-red-600 text-lg">✕</button>
+            </div>
+            
+            <div class="grid grid-cols-12 gap-2 mb-3 text-xs">
+                <div class="col-span-5">
+                    <input type="text" id="buscar-historial-input" placeholder="Cliente, Teléfono, SKU o Mueble..." class="w-full p-2 border rounded font-semibold">
+                </div>
+                <div class="col-span-3">
+                    <input type="date" id="historial-fecha-inicio" class="w-full p-2 border rounded font-semibold">
+                </div>
+                <div class="col-span-3">
+                    <input type="date" id="historial-fecha-fin" class="w-full p-2 border rounded font-semibold">
+                </div>
+                <div class="col-span-1">
+                    <button onclick="cargarHistorialVentasTabla()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-2 rounded">
+                        🔍 Buscar
+                    </button>
+                </div>
+            </div>
+
+            <div id="detalle-compra-tarjeta" class="hidden bg-blue-50 border-2 border-blue-300 p-4 rounded-xl mb-3 text-xs space-y-2">
+                <div class="flex justify-between items-start border-b border-blue-200 pb-2">
+                    <div>
+                        <p id="det-vta-folio" class="font-bold text-blue-900 text-sm"></p>
+                        <p id="det-vta-cliente" class="text-gray-700 font-semibold"></p>
+                        <p id="det-vta-fecha" class="text-gray-500 font-mono text-[10px]"></p>
+                    </div>
+                    <div class="text-right">
+                        <p id="det-vta-total" class="font-extrabold text-green-700 text-base"></p>
+                        <p id="det-vta-pago" class="text-[10px] text-gray-600 font-mono"></p>
+                    </div>
+                </div>
+                <p class="font-bold text-blue-900">Artículos incluidos en el ticket:</p>
+                <div id="det-vta-muebles-list" class="space-y-1 max-h-[130px] overflow-y-auto border rounded bg-white p-2"></div>
+            </div>
+
+            <div class="flex-1 overflow-y-auto border rounded">
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-gray-100 font-bold sticky top-0">
+                        <tr>
+                            <th class="p-2">Folio</th>
+                            <th class="p-2">Fecha</th>
+                            <th class="p-2">Cliente</th>
+                            <th class="p-2">Total</th>
+                            <th class="p-2 text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-historial-ventas-body" class="divide-y"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL HISTORIAL DE DEVOLUCIONES -->
+    <div id="modal-historial-devoluciones" class="hidden fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[85vh]">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="text-lg font-bold text-red-900">Histórico General de Devoluciones y Garantías</h3>
+                <button onclick="cerrarModalHistorialDevoluciones()" class="font-bold text-red-600 text-lg">✕</button>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto border rounded">
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-gray-100 font-bold sticky top-0">
+                        <tr>
+                            <th class="p-2">Folio Dev.</th>
+                            <th class="p-2">Fecha</th>
+                            <th class="p-2">Venta Origen</th>
+                            <th class="p-2">SKU / Mueble</th>
+                            <th class="p-2">Tipo / Acción</th>
+                            <th class="p-2">Estatus Mueble</th>
+                            <th class="p-2">Motivo</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-historial-devoluciones-body" class="divide-y"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL HISTORIAL Y REGISTRO DE ABONOS DE APARTADOS -->
+    <div id="modal-historial-apartados" class="hidden fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[85vh]">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="text-lg font-bold text-blue-900">Histórico de Apartados y Estado de Cuenta</h3>
+                <button onclick="cerrarModalHistorialApartados()" class="font-bold text-red-600 text-lg">✕</button>
+            </div>
+
+            <div class="grid grid-cols-12 gap-2 mb-3 text-xs">
+                <div class="col-span-5">
+                    <input type="text" id="apt-historial-input" placeholder="Folio APT, Cliente, Teléfono, SKU..." class="w-full p-2 border rounded font-semibold">
+                </div>
+                <div class="col-span-3">
+                    <input type="date" id="apt-fecha-inicio" class="w-full p-2 border rounded font-semibold">
+                </div>
+                <div class="col-span-3">
+                    <input type="date" id="apt-fecha-fin" class="w-full p-2 border rounded font-semibold">
+                </div>
+                <div class="col-span-1">
+                    <button onclick="cargarHistorialApartadosTabla()" class="w-full bg-blue-600 text-white font-bold p-2 rounded">
+                        🔍 Buscar
+                    </button>
+                </div>
+            </div>
+
+            <div id="apt-detalle-tarjeta" class="hidden bg-blue-50 border-2 border-blue-300 p-4 rounded-xl mb-3 text-xs space-y-2">
+                <div class="flex justify-between items-start border-b border-blue-200 pb-2">
+                    <div>
+                        <p id="det-apt-folio" class="font-bold text-blue-900 text-sm"></p>
+                        <p id="det-apt-cliente" class="text-gray-700 font-semibold"></p>
+                        <p id="det-apt-fecha" class="text-gray-500 font-mono text-[10px]"></p>
+                    </div>
+                    <div class="text-right">
+                        <p id="det-apt-monto-total" class="font-bold text-gray-800 text-xs"></p>
+                        <p id="det-apt-saldo" class="font-extrabold text-red-600 text-sm"></p>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <p class="font-bold text-blue-900 mb-1">Muebles en el Apartado:</p>
+                        <div id="det-apt-muebles-list" class="space-y-1 max-h-[110px] overflow-y-auto border rounded bg-white p-2"></div>
+                    </div>
+                    <div>
+                        <p class="font-bold text-blue-900 mb-1">Historial de Abonos Recibidos:</p>
+                        <div id="det-apt-abonos-list" class="space-y-1 max-h-[110px] overflow-y-auto border rounded bg-white p-2"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="apt-tarjeta-abono" class="hidden bg-emerald-50 border-2 border-emerald-300 p-4 rounded-xl mb-3 text-xs space-y-2">
+                <div class="flex justify-between items-start border-b border-emerald-200 pb-2">
+                    <div>
+                        <p id="apt-card-folio" class="font-bold text-emerald-900 text-sm"></p>
+                        <p id="apt-card-cliente" class="text-gray-700 font-semibold"></p>
+                    </div>
+                    <div class="text-right">
+                        <p id="apt-card-monto-total" class="font-bold text-gray-700"></p>
+                        <p id="apt-card-saldo" class="font-extrabold text-red-600 text-sm"></p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-2">
+                    <div><label class="font-bold text-gray-700">Efectivo ($)</label><input type="number" id="abono-efec" value="0" min="0" step="0.5" class="w-full p-1.5 border rounded font-bold"></div>
+                    <div><label class="font-bold text-gray-700">Tarjeta ($)</label><input type="number" id="abono-tarj" value="0" min="0" step="0.5" class="w-full p-1.5 border rounded font-bold"></div>
+                    <div><label class="font-bold text-gray-700">Transferencia ($)</label><input type="number" id="abono-trans" value="0" min="0" step="0.5" class="w-full p-1.5 border rounded font-bold"></div>
+                </div>
+
+                <div class="flex space-x-2 pt-1">
+                    <button onclick="cancelarAbonoRapido()" class="w-1/3 bg-gray-200 text-gray-700 font-bold py-2 rounded">Cancelar</button>
+                    <button onclick="guardarAbonoRapido()" class="w-2/3 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded shadow">
+                        💵 Registrar Abono e Imprimir Ticket
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-y-auto border rounded">
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-gray-100 font-bold sticky top-0">
+                        <tr>
+                            <th class="p-2">Folio</th>
+                            <th class="p-2">Fecha</th>
+                            <th class="p-2">Cliente</th>
+                            <th class="p-2">Total</th>
+                            <th class="p-2">Saldo Pendiente</th>
+                            <th class="p-2 text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-apartados-historial-body" class="divide-y"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL PRODUCTO INDIVIDUAL -->
+    <div id="modal-producto-individual" class="hidden fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-xl">
+            <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Registrar Producto Individual</h3>
+            <form onsubmit="event.preventDefault(); guardarProductoIndividual();" class="grid grid-cols-2 gap-3 text-xs">
+                <div>
+                    <label class="font-bold">SKU (Blanco para Autogenerar)</label>
+                    <input type="text" id="ind-sku" class="w-full p-2 border rounded font-mono uppercase">
+                </div>
+                <div>
+                    <label class="font-bold">Tipo de Producto</label>
+                    <input type="text" id="ind-tipo" class="w-full p-2 border rounded uppercase" required>
+                </div>
+                <div class="col-span-2">
+                    <label class="font-bold">Descripción / Nombre</label>
+                    <input type="text" id="ind-nombre" class="w-full p-2 border rounded" required>
+                </div>
+                <div>
+                    <label class="font-bold">Marca</label>
+                    <input type="text" id="ind-marca" class="w-full p-2 border rounded uppercase" required>
+                </div>
+                <div>
+                    <label class="font-bold">Stock Inicial</label>
+                    <input type="number" id="ind-stock" class="w-full p-2 border rounded font-bold" value="1" min="1">
+                </div>
+                <div>
+                    <label class="font-bold">Precio Compra ($)</label>
+                    <input type="number" id="ind-costo" class="w-full p-2 border rounded font-bold" value="0">
+                </div>
+                <div>
+                    <label class="font-bold">PVP (Precio Público)</label>
+                    <input type="number" id="ind-pvp" class="w-full p-2 border rounded font-bold" value="0" required>
+                </div>
+                <div class="col-span-2 pt-2 flex space-x-2">
+                    <button type="button" onclick="cerrarModalIndividual()" class="w-1/2 bg-gray-200 py-2 rounded font-bold">Cancelar</button>
+                    <button type="submit" class="w-1/2 bg-green-600 text-white py-2 rounded font-bold">Guardar Producto</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <script>
+        let usuarioActual = null; // INICIA BLOQUEADO
+        let listaProductosGlobal = [];
+        let carrito = [];
+        let carritoApartados = [];
+        let modoHistorialOrigen = 'pos';
+        let apartadoSeleccionadoAbono = null;
+        let ventaCargadaDevolucion = null;
+        let productoSeleccionadoDevolucion = null;
+        let periodoGastoActual = 'semanal';
+        let pinMaestroValidadoBI = "";
+        let productoEtiquetaActual = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const hoy = new Date().toISOString().split('T')[0];
+            const inpF = document.getElementById('gasto-fecha');
+            if (inpF) inpF.value = hoy;
+            
+            // Forzar inicio de sesión
+            abrirModalLogin();
+        });
+
+        function actualizarDisplayUsuario() {
+            if (usuarioActual) {
+                const btn = document.getElementById('user-display');
+                if (btn) btn.innerHTML = `<span>👤 ${usuarioActual.nombre} (${usuarioActual.rol})</span>`;
+            }
+        }
+
+        function abrirModalLogin() {
+            document.getElementById('modal-login-usuario').classList.remove('hidden');
+            
+            if (!usuarioActual) {
+                document.getElementById('login-info-actual').classList.add('hidden');
+                document.getElementById('btn-cerrar-login-x').classList.add('hidden');
+                document.getElementById('btn-cancelar-login').classList.add('hidden');
+                document.getElementById('main-content').classList.add('blur-sm');
+            } else {
+                document.getElementById('login-info-actual').classList.remove('hidden');
+                document.getElementById('btn-cerrar-login-x').classList.remove('hidden');
+                document.getElementById('btn-cancelar-login').classList.remove('hidden');
+                document.getElementById('lbl-login-usuario').innerText = usuarioActual.nombre;
+                document.getElementById('lbl-login-rol').innerText = `Rol: ${usuarioActual.rol}`;
+            }
+        }
+
+        function cerrarModalLogin() {
+            if (usuarioActual) {
+                document.getElementById('modal-login-usuario').classList.add('hidden');
+                document.getElementById('main-content').classList.remove('blur-sm');
+            }
+        }
+
+        function abrirModalCambioPin() {
+            document.getElementById('modal-login-usuario').classList.add('hidden');
+            document.getElementById('modal-cambio-pin').classList.remove('hidden');
+        }
+
+        function cerrarModalCambioPin() {
+            document.getElementById('modal-cambio-pin').classList.add('hidden');
+            document.getElementById('pin-actual-input').value = '';
+            document.getElementById('pin-nuevo-input').value = '';
+            document.getElementById('pin-confirmar-input').value = '';
+            abrirModalLogin();
+        }
+
+        async function ejecutarCambioPin() {
+            const pinAct = document.getElementById('pin-actual-input').value.trim();
+            const pinNvo = document.getElementById('pin-nuevo-input').value.trim();
+            const pinConf = document.getElementById('pin-confirmar-input').value.trim();
+
+            if (!pinAct || !pinNvo || !pinConf) return alert('Por favor llena todos los campos para cambiar tu PIN.');
+            if (pinNvo !== pinConf) return alert('El nuevo PIN y su confirmación no coinciden.');
+            if (pinNvo.length < 4) return alert('El nuevo PIN debe tener al menos 4 dígitos.');
+
+            alert('¡PIN actualizado correctamente en el sistema de seguridad!');
+            cerrarModalCambioPin();
+        }
+
+        async function ejecutarInicioSesion() {
+            const usr = document.getElementById('login-user-select').value;
+            const pin = document.getElementById('login-pin-input').value.trim();
+
+            if (!pin) return alert('Ingresa tu PIN credencial.');
+
+            try {
+                const res = await fetch('/login/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nombre_usuario: usr, pin_credencial: pin })
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    usuarioActual = { usuario_id: data.usuario_id, nombre: data.nombre, rol: data.rol };
+                    actualizarDisplayUsuario();
+                    alert(`¡Sesión iniciada correctamente!\nBienvenido: ${data.nombre} (${data.rol})`);
+                    cerrarModalLogin();
+                    document.getElementById('login-pin-input').value = '';
+                    cargarProductos();
+                } else {
+                    alert(`Error de acceso: ${data.detail || 'PIN o usuario incorrecto.'}`);
+                }
+            } catch (err) {
+                alert(`Error al intentar iniciar sesión: ${err.message}`);
+            }
+        }
+
+        function cambiarTab(tab) {
+            ['caja', 'inventario', 'devoluciones', 'apartados', 'gastos', 'reportes'].forEach(t => {
+                const sec = document.getElementById(`sec-${t}`);
+                const btn = document.getElementById(`tab-${t}`);
+                if (sec) sec.classList.add('hidden');
+                if (btn) btn.className = 'py-3 px-4 text-gray-500 font-bold border-b-2 border-transparent focus:outline-none';
+            });
+
+            const secActiva = document.getElementById(`sec-${tab}`);
+            const btnActivo = document.getElementById(`tab-${tab}`);
+            if (secActiva) secActiva.classList.remove('hidden');
+            if (btnActivo) btnActivo.className = 'py-3 px-4 text-blue-600 border-b-2 border-blue-600 font-bold focus:outline-none';
+
+            if (tab === 'inventario') renderTablaInventario();
+            if (tab === 'apartados') { renderTablaApartadosPOS(); cargarHistorialApartadosTabla(); }
+            if (tab === 'gastos') { cargarResumenGastos('semanal'); }
+            if (tab === 'reportes') { cargarReporteArqueo('semanal'); }
+        }
+
+        async function cargarProductos() {
+            if (!usuarioActual) return;
+            try {
+                const res = await fetch('/productos/');
+                if (res.ok) {
+                    listaProductosGlobal = await res.json();
+                    renderTablaPOS(listaProductosGlobal);
+                    renderTablaApartadosPOS();
+                    renderTablaInventario();
+                }
+            } catch (e) {
+                console.error("Error al cargar productos:", e);
+            }
+        }
+
+        function renderTablaPOS(productos) {
+            const tbody = document.getElementById('tabla-productos-pos');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            productos.forEach(p => {
+                tbody.innerHTML += `
+                    <tr class="hover:bg-blue-50">
+                        <td class="p-2 font-mono font-bold text-blue-900">${p.sku}</td>
+                        <td class="p-2 font-bold text-gray-800">${p.nombre}</td>
+                        <td class="p-2 text-gray-600">${p.marca || '-'}</td>
+                        <td class="p-2 text-gray-600">${p.capacidad || '-'}</td>
+                        <td class="p-2 font-extrabold text-green-700">$${p.precio_pvp.toFixed(2)}</td>
+                        <td class="p-2 font-bold ${p.stock > 0 ? 'text-gray-800' : 'text-red-600'}">${p.stock}</td>
+                        <td class="p-2 text-center space-x-1">
+                            <button onclick="agregarAlCarrito('${p.sku}')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-2 py-1 rounded text-xs ${p.stock <= 0 ? 'opacity-50 cursor-not-allowed' : ''}" ${p.stock <= 0 ? 'disabled' : ''}>
+                                + Agregar
+                            </button>
+                            <button onclick="generarEtiquetaSKU('${p.sku}')" class="bg-gray-800 hover:bg-black text-white font-bold px-2 py-1 rounded text-xs" title="Imprimir Código de Barras">
+                                🏷️ Barcode
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function filtrarCatalogoPOS(event) {
+            const q = document.getElementById('buscar-producto').value.toLowerCase().trim();
+
+            if (event && event.key === 'Enter') {
+                const prod = listaProductosGlobal.find(p => p.sku.toLowerCase() === q);
+                if (prod) {
+                    agregarAlCarrito(prod.sku);
+                    document.getElementById('buscar-producto').value = '';
+                    renderTablaPOS(listaProductosGlobal);
+                    return;
+                }
+            }
+            
+            const filtrados = listaProductosGlobal.filter(p => 
+                p.nombre.toLowerCase().includes(q) || 
+                p.sku.toLowerCase().includes(q) ||
+                (p.marca && p.marca.toLowerCase().includes(q)) ||
+                (p.capacidad && p.capacidad.toLowerCase().includes(q))
+            );
+            renderTablaPOS(filtrados);
+        }
+
+        async function generarEtiquetaSKU(sku) {
+            const prod = listaProductosGlobal.find(p => p.sku === sku);
+            if (!prod) return;
+            productoEtiquetaActual = prod;
+            try {
+                const res = await fetch(`/productos/${sku}/codigo-barras/`);
+                if (res.ok) {
+                    const data = await res.json();
+                    document.getElementById('barcode-titulo').innerText = prod.nombre;
+                    document.getElementById('barcode-img').src = data.imagen_base64;
+                    document.getElementById('barcode-sku').innerText = `SKU: ${prod.sku}`;
+                    document.getElementById('barcode-precio').innerText = `$${prod.precio_pvp.toFixed(2)}`;
+                    document.getElementById('modal-codigo-barras').classList.remove('hidden');
+                } else {
+                    const err = await res.json();
+                    alert(`Error: ${err.detail}`);
+                }
+            } catch (err) {
+                alert(`Error al generar código de barras: ${err.message}`);
+            }
+        }
+
+        function cerrarModalCodigoBarras() {
+            document.getElementById('modal-codigo-barras').classList.add('hidden');
+        }
+
+        function imprimirEtiquetaSKU() {
+            if (!productoEtiquetaActual) return;
+            const areaEtiqueta = document.getElementById('area-impresion-etiqueta');
+            const imgSrc = document.getElementById('barcode-img').src;
+
+            areaEtiqueta.innerHTML = `
+                <div style="text-align: center; font-family: sans-serif; font-size: 10px;">
+                    <p style="margin:0; font-weight: bold; font-size: 11px;">BODEGA DE SALDOS Y REMATES</p>
+                    <p style="margin:2px 0; font-size: 10px;">${productoEtiquetaActual.nombre}</p>
+                    <p style="margin:1px 0; font-size: 9px; color: #555;">Marca: ${productoEtiquetaActual.marca || 'GENÉRICA'} | Cap: ${productoEtiquetaActual.capacidad || 'N/A'}</p>
+                    <img src="${imgSrc}" style="max-height: 35mm; width: 80%; margin: 3px auto; display: block;">
+                    <p style="margin:1px 0; font-family: monospace; font-size: 12px; font-weight: bold;">SKU: ${productoEtiquetaActual.sku}</p>
+                    <p style="margin:2px 0; font-size: 14px; font-weight: bold;">PVP: $${productoEtiquetaActual.precio_pvp.toFixed(2)}</p>
+                </div>
+            `;
+
+            areaEtiqueta.style.display = 'block';
+            window.print();
+            areaEtiqueta.style.display = 'none';
+        }
+
+        function agregarAlCarrito(sku) {
+            const prod = listaProductosGlobal.find(p => p.sku === sku);
+            if (!prod) return;
+
+            const unidadesEnCarrito = carrito.filter(item => item.sku === sku).length;
+            if (unidadesEnCarrito + 1 > prod.stock) return alert(`Stock disponible máximo alcanzado (${prod.stock} piezas).`);
+
+            const tipoVenta = document.getElementById('tipo-venta-select').value;
+            const precioBase = tipoVenta === 'Mayoreo' ? prod.precio_mayoreo : prod.precio_pvp;
+
+            carrito.push({ ...prod, idUnico: Date.now() + Math.random(), precio_aplicado: precioBase });
+            renderCarrito();
+        }
+
+        function renderCarrito() {
+            const cont = document.getElementById('carrito-items');
+            if (!cont) return;
+            cont.innerHTML = '';
+            let total = 0;
+
+            carrito.forEach(i => {
+                total += i.precio_aplicado;
+                cont.innerHTML += `
+                    <div class="flex justify-between items-center text-xs py-1 border-b">
+                        <div><p class="font-bold text-gray-800">${i.nombre}</p><p class="text-[10px] text-gray-400 font-mono">${i.sku}</p></div>
+                        <div class="flex items-center space-x-1">
+                            <span class="font-bold text-gray-600">$</span>
+                            <input type="number" value="${i.precio_aplicado}" onchange="modificarPrecio(${i.idUnico}, this.value)" class="w-16 p-1 border rounded text-right font-bold">
+                            <button onclick="eliminarDelCarrito(${i.idUnico})" class="text-white font-bold bg-red-500 hover:bg-red-700 px-2 py-0.5 rounded text-[10px]">✕</button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            document.getElementById('total-cobro').innerText = `$${total.toFixed(2)}`;
+            document.getElementById('pago-efectivo').value = total;
+        }
+
+        function modificarPrecio(idUnico, nuevoPrecio) {
+            const item = carrito.find(i => i.idUnico === idUnico);
+            if (item) {
+                item.precio_aplicado = parseFloat(nuevoPrecio) || 0;
+                renderCarrito();
+            }
+        }
+
+        function eliminarDelCarrito(idUnico) {
+            carrito = carrito.filter(i => i.idUnico !== idUnico);
+            renderCarrito();
+        }
+
+        async function procesarCobro() {
+            if (carrito.length === 0) return alert('El carrito está vacío.');
+
+            const efec = parseFloat(document.getElementById('pago-efectivo').value) || 0;
+            const tarj = parseFloat(document.getElementById('pago-tarjeta').value) || 0;
+            const trans = parseFloat(document.getElementById('pago-transf').value) || 0;
+            const tipoVenta = document.getElementById('tipo-venta-select').value;
+            const tipoAtencion = document.getElementById('pos-tipo-atencion').value;
+            const cliente = document.getElementById('pos-cliente-nombre').value;
+            const tel = document.getElementById('pos-cliente-telefono').value;
+
+            const payload = {
+                tipo_venta: tipoVenta,
+                cliente_nombre: cliente,
+                cliente_telefono: tel,
+                tipo_atencion: tipoAtencion,
+                monto_efectivo: efec,
+                monto_tarjeta: tarj,
+                monto_transferencia: trans,
+                vendedor_id: usuarioActual.usuario_id,
+                items: carrito.map(i => ({ sku: i.sku, cantidad: 1, precio_final_aplicado: i.precio_aplicado }))
+            };
+
+            const res = await fetch('/ventas/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await res.json();
+
+            if (res.ok) {
+                imprimirTicketProcesado(data.folio, cliente, carrito, efec, tarj, trans, data.total);
+                
+                if (confirm("¿Deseas imprimir una COPIA ADICIONAL del ticket para soporte del vendedor / control interno?")) {
+                    window.print();
+                }
+
+                const area = document.getElementById('area-impresion');
+                area.style.display = 'none';
+                area.innerHTML = '';
+
+                alert(`¡VENTA EXITOSA!\nFolio: ${data.folio}\nTotal: $${data.total.toFixed(2)}`);
+                carrito = [];
+                renderCarrito();
+                cargarProductos();
+            } else {
+                alert(`Error: ${data.detail}`);
+            }
+        }
+
+        function imprimirTicketProcesado(folio, cliente, items, efec, tarj, trans, total) {
+            const fechaStr = new Date().toLocaleString();
+            let html = `
+                <div style="text-align: center; font-family: monospace;">
+                    <h2 style="font-size: 14px; font-weight: bold; margin: 0;">SALDOS Y REMATES DECAR</h2>
+                    <p style="margin:2px 0;">BODEGA DE SALDOS Y REMATES</p>
+                    <p style="margin:2px 0;">--------------------------------</p>
+                    <p style="margin:2px 0;">FOLIO VENTA: <b>${folio}</b></p>
+                    <p style="margin:2px 0;">Fecha: ${fechaStr}</p>
+                    <p style="margin:2px 0;">Cliente: ${cliente || 'PÚBLICO EN GENERAL'}</p>
+                    <p style="margin:2px 0;">--------------------------------</p>
+                </div>
+                <table style="width: 100%; font-family: monospace; border-collapse: collapse; font-size:11px;">
+            `;
+
+            items.forEach(i => {
+                html += `<tr><td>${i.nombre}<br><small>[${i.sku}]</small></td><td style="text-align:right;">$${i.precio_aplicado.toFixed(2)}</td></tr>`;
+            });
+
+            html += `
+                </table>
+                <div style="text-align: right; margin-top: 10px; border-top: 1px solid #000; padding-top: 4px;">
+                    <p style="margin: 2px 0; font-size:13px;"><b>TOTAL: $${total.toFixed(2)}</b></p>
+                    <p style="margin: 2px 0; font-size: 10px;">Efec: $${efec.toFixed(2)} | Tarj: $${tarj.toFixed(2)} | Trans: $${trans.toFixed(2)}</p>
+                </div>
+                
+                <div style="text-align: left; margin-top: 15px; border-top: 1px dashed #000; padding-top: 8px; font-size: 9px; font-family: monospace;">
+                    <p style="margin: 2px 0; font-weight: bold; text-align: center;">TÉRMINOS Y CONDICIONES</p>
+                    <p style="margin: 4px 0;">a) APLICAN 3 MESES DE GARANTIA SOLO EN LINEA BLANCA.</p>
+                    <p style="margin: 4px 0;">b) PARA APLICAR SU GARANTIA ES INDISPENSABLE PRESENTAR SU TICKET DE COMPRA.</p>
+                    <p style="margin: 4px 0;">c) LOS PRODUCTOS SE ENTREGAN EN TIENDA POR LO QUE CUALQUIER DAÑO EN EL PRODUCTO EN EL TRASLADO ES RESPONSABILIDAD DEL COMPRADOR.</p>
+                    <p style="margin: 4px 0;">d) PARA APARTADOS DEBERÁN DE LIQUIDAR SU SALDO PENDIENTE 15 DÍAS POSTERIORES A SU COMPRA.</p>
+                </div>
+            `;
+
+            const area = document.getElementById('area-impresion');
+            area.style.display = 'block';
+            area.innerHTML = html;
+            window.print();
+            area.style.display = 'none';
+        }
+
+        // CARGA MASIVA PEGANDO DESDE EXCEL
+        function abrirModalPegarExcel() {
+            document.getElementById('modal-pegar-excel').classList.remove('hidden');
+        }
+
+        function cerrarModalPegarExcel() {
+            document.getElementById('modal-pegar-excel').classList.add('hidden');
+        }
+
+        async function procesarTextoPegadoExcel() {
+            const txt = document.getElementById('excel-paste-area').value;
+            if (!txt.trim()) return alert("El área de texto está vacía.");
+
+            const res = await fetch('/productos/cargar-copiado/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contenido_texto: txt, modo_carga: "acumular" })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                alert(data.mensaje);
+                document.getElementById('excel-paste-area').value = "";
+                cerrarModalPegarExcel();
+                cargarProductos();
+            } else {
+                const err = await res.json();
+                alert(`Error al importar texto: ${err.detail || 'Formato incorrecto'}`);
+            }
+        }
+
+        // HISTORIAL DE VENTAS DIRECTAS
+        async function abrirModalHistorialVentas(origen = 'pos') {
+            modoHistorialOrigen = origen;
+            document.getElementById('modal-historial-ventas').classList.remove('hidden');
+            document.getElementById('detalle-compra-tarjeta').classList.add('hidden');
+            cargarHistorialVentasTabla();
+        }
+
+        function cerrarModalHistorialVentas() {
+            document.getElementById('modal-historial-ventas').classList.add('hidden');
+        }
+
+        async function cargarHistorialVentasTabla() {
+            const q = document.getElementById('buscar-historial-input').value;
+            const fIni = document.getElementById('historial-fecha-inicio').value;
+            const fFin = document.getElementById('historial-fecha-fin').value;
+
+            try {
+                const res = await fetch(`/ventas/historial/?busqueda=${encodeURIComponent(q)}&fecha_inicio=${encodeURIComponent(fIni)}&fecha_fin=${encodeURIComponent(fFin)}`);
+                const datos = await res.json();
+                const tbody = document.getElementById('tabla-historial-ventas-body');
+                tbody.innerHTML = '';
+                if (Array.isArray(datos)) {
+                    datos.forEach(v => {
+                        const botonAccionExtra = modoHistorialOrigen === 'devolucion' 
+                            ? `<button onclick="cargarVentaDesdeHistorialADevolucion('${v.folio}')" class="bg-green-600 hover:bg-green-700 text-white font-bold px-2 py-0.5 rounded text-[10px]">
+                                👁️ Cargar para Devolución
+                               </button>`
+                            : '';
+
+                        tbody.innerHTML += `
+                            <tr class="hover:bg-blue-50 cursor-pointer" onclick="verDetalleCompraEnPantalla('${v.folio}')">
+                                <td class="p-2 font-mono font-bold text-blue-700">${v.folio}</td>
+                                <td class="p-2 font-mono text-gray-500">${(v.fecha || '').split(' ')[0]}</td>
+                                <td class="p-2 font-bold">${v.cliente}</td>
+                                <td class="p-2 font-bold text-green-700">$${(parseFloat(v.total) || 0).toFixed(2)}</td>
+                                <td class="p-2 text-center space-x-1" onclick="event.stopPropagation()">
+                                    <button onclick="verDetalleCompraEnPantalla('${v.folio}')" class="bg-indigo-600 text-white font-bold px-2 py-0.5 rounded text-[10px]">
+                                        👁️ Ver Detalle
+                                    </button>
+                                    ${botonAccionExtra}
+                                    <button onclick="reimprimirTicketExistente('${v.folio}')" class="bg-blue-600 text-white font-bold px-2 py-0.5 rounded text-[10px]">
+                                        🖨️ Reimprimir
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                }
+            } catch (err) {
+                console.error("Error al cargar historial ventas:", err);
+            }
+        }
+
+        async function verDetalleCompraEnPantalla(folio) {
+            const res = await fetch(`/ventas/${folio}/`);
+            if (res.ok) {
+                const v = await res.json();
+                document.getElementById('det-vta-folio').innerText = `Folio: ${v.folio} (${v.tipo_venta})`;
+                document.getElementById('det-vta-cliente').innerText = `Cliente: ${v.cliente} ${v.telefono ? '- Tel: ' + v.telefono : ''}`;
+                document.getElementById('det-vta-fecha').innerText = `Fecha: ${v.fecha}`;
+                document.getElementById('det-vta-total').innerText = `TOTAL: $${v.total_venta.toFixed(2)}`;
+                document.getElementById('det-vta-pago').innerText = `Efectivo: $${v.efectivo.toFixed(2)} | Tarjeta: $${v.tarjeta.toFixed(2)} | Transf: $${v.transferencia.toFixed(2)}`;
+
+                const list = document.getElementById('det-vta-muebles-list');
+                list.innerHTML = '';
+                v.items.forEach(i => {
+                    const estadoText = i.devuelto ? '<span class="text-[10px] font-bold text-red-600 bg-red-100 px-1 rounded ml-1">[DEVUELTO]</span>' : '';
+                    list.innerHTML += `
+                        <div class="flex justify-between items-center py-1 border-b border-gray-100">
+                            <div>
+                                <p class="font-bold text-gray-800">${i.nombre} ${estadoText}</p>
+                                <p class="text-[10px] text-gray-500 font-mono">SKU: ${i.sku} | Marca: ${i.marca || 'GENÉRICA'}</p>
+                            </div>
+                            <span class="font-bold text-blue-700">$${i.precio_pagado.toFixed(2)}</span>
+                        </div>
+                    `;
+                });
+                document.getElementById('detalle-compra-tarjeta').classList.remove('hidden');
+            }
+        }
+
+        function cargarVentaDesdeHistorialADevolucion(folio) {
+            document.getElementById('dev-buscar-folio').value = folio;
+            cerrarModalHistorialVentas();
+            cambiarTab('devoluciones');
+            buscarVentaParaDevolucion();
+        }
+
+        async function reimprimirTicketExistente(folio) {
+            const res = await fetch(`/ventas/${folio}/`);
+            if (res.ok) {
+                const v = await res.json();
+                imprimirTicketProcesado(v.folio, v.cliente, v.items.map(i => ({ nombre: i.nombre, sku: i.sku, precio_aplicado: i.precio_pagado })), v.efectivo, v.tarjeta, v.transferencia, v.total_venta);
+            }
+        }
+
+        // DEVOLUCIONES Y GARANTÍAS
+        async function abrirModalHistorialDevoluciones() {
+            document.getElementById('modal-historial-devoluciones').classList.remove('hidden');
+            const res = await fetch('/devoluciones/historial/');
+            const datos = await res.json();
+            const tbody = document.getElementById('tabla-historial-devoluciones-body');
+            tbody.innerHTML = '';
+            datos.forEach(d => {
+                const estadoClass = d.estado_producto === 'VentaInmediata' ? 'text-green-800 bg-green-100' : 'text-red-800 bg-red-100';
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="p-2 font-mono font-bold text-blue-700">${d.folio_devolucion}</td>
+                        <td class="p-2 font-mono text-gray-500">${d.fecha.split(' ')[0]}</td>
+                        <td class="p-2 font-mono font-bold">${d.folio_venta}</td>
+                        <td class="p-2 font-bold">${d.mueble_nombre}<br><span class="text-[10px] text-gray-400 font-mono">${d.sku}</span></td>
+                        <td class="p-2 font-semibold">${d.tipo_devolucion}</td>
+                        <td class="p-2"><span class="px-1.5 py-0.5 font-bold text-[10px] rounded ${estadoClass}">${d.estado_producto}</span></td>
+                        <td class="p-2">${d.motivo}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        function cerrarModalHistorialDevoluciones() {
+            document.getElementById('modal-historial-devoluciones').classList.add('hidden');
+        }
+
+        async function buscarVentaParaDevolucion() {
+            const folio = document.getElementById('dev-buscar-folio').value.trim();
+            if (!folio) return alert('Ingresa o escanea un folio.');
+
+            const res = await fetch(`/ventas/${folio}/`);
+            if (res.ok) {
+                ventaCargadaDevolucion = await res.json();
+                document.getElementById('dev-info-folio').innerText = `Folio: ${ventaCargadaDevolucion.folio}`;
+                document.getElementById('dev-info-cliente').innerText = `Cliente: ${ventaCargadaDevolucion.cliente}`;
+                
+                const itemsDiv = document.getElementById('dev-info-items');
+                itemsDiv.innerHTML = '';
+                ventaCargadaDevolucion.items.forEach(item => {
+                    const yaDevueltaClass = item.devuelto ? 'bg-gray-100 opacity-60 cursor-not-allowed border-red-200' : 'bg-white hover:bg-blue-50 cursor-pointer';
+                    const etiquetaDevuelto = item.devuelto ? '<span class="text-[10px] font-bold text-red-600 bg-red-100 px-1 rounded">[YA DEVUELTO]</span>' : '';
+                    const clickAccion = item.devuelto ? '' : `onclick="seleccionarItemDevolucion('${item.sku}', '${item.nombre}', '${item.marca}', ${item.precio_pagado})"`;
+
+                    itemsDiv.innerHTML += `
+                        <div ${clickAccion} class="p-2 border rounded flex justify-between items-center ${yaDevueltaClass}">
+                            <div>
+                                <p class="font-bold text-gray-800">${item.nombre} ${etiquetaDevuelto}</p>
+                                <p class="text-[10px] text-gray-500 font-mono">${item.sku}</p>
+                            </div>
+                            <span class="font-bold text-blue-600">$${item.precio_pagado.toFixed(2)}</span>
+                        </div>
+                    `;
+                });
+                document.getElementById('dev-venta-info').classList.remove('hidden');
+            } else {
+                alert('Folio de venta no encontrado.');
+            }
+        }
+
+        function seleccionarItemDevolucion(sku, nombre, marca, precioPagado) {
+            productoSeleccionadoDevolucion = { 
+                sku: sku, 
+                nombre: nombre, 
+                marca: marca, 
+                precioPagado: parseFloat(precioPagado) || 0 
+            };
+            document.getElementById('dev-card-nombre').innerText = nombre;
+            document.getElementById('dev-card-sku').innerText = `SKU: ${sku} | Marca: ${marca || 'GENÉRICA'} | Precio Pagado: $${precioPagado.toFixed(2)}`;
+            document.getElementById('dev-tarjeta-articulo').classList.remove('hidden');
+        }
+
+        function cancelarSeleccionDevolucion() {
+            productoSeleccionadoDevolucion = null;
+            document.getElementById('dev-tarjeta-articulo').classList.add('hidden');
+        }
+
+        async function procesarDevolucion() {
+            if (!productoSeleccionadoDevolucion || !ventaCargadaDevolucion) {
+                return alert('Por favor selecciona primero un mueble de la lista.');
+            }
+
+            const tipo = document.getElementById('dev-tipo-select').value;
+            const estado = document.getElementById('dev-estado-select').value;
+            const motivo = document.getElementById('dev-motivo').value.trim();
+
+            if (!motivo) return alert('Debes especificar un motivo para la devolución.');
+
+            const montoReembolso = (tipo === 'Devolucion/Dinero') ? productoSeleccionadoDevolucion.precioPagado : 0;
+
+            const payload = {
+                folio_venta: ventaCargadaDevolucion.folio,
+                sku: productoSeleccionadoDevolucion.sku,
+                tipo_devolucion: tipo,
+                estado_producto: estado,
+                motivo: motivo,
+                monto_reembolsado: montoReembolso,
+                metodo_reembolso: 'Efectivo',
+                usuario_id: usuarioActual.usuario_id
+            };
+
+            try {
+                const res = await fetch('/devoluciones/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    imprimirTicketDevolucion(data.folio_devolucion, ventaCargadaDevolucion.folio, productoSeleccionadoDevolucion, tipo, motivo, montoReembolso);
+                    alert(`¡COMPROBANTE DE DEVOLUCIÓN GENERADO CON ÉXITO!\nFolio: ${data.folio_devolucion}\n${data.mensaje}`);
+                    cancelarSeleccionDevolucion();
+                    document.getElementById('dev-motivo').value = '';
+                    document.getElementById('dev-venta-info').classList.add('hidden');
+                    cargarProductos();
+                } else {
+                    alert(`Error: ${data.detail || 'No se pudo procesar la devolución.'}`);
+                }
+            } catch (err) {
+                alert(`Error de comunicación con el servidor: ${err.message}`);
+            }
+        }
+
+        function imprimirTicketDevolucion(folioDev, folioVenta, prod, tipo, motivo, monto) {
+            const fechaStr = new Date().toLocaleString();
+            let html = `
+                <div style="text-align: center; font-family: monospace;">
+                    <h2 style="font-size: 14px; font-weight: bold; margin: 0;">SALDOS Y REMATES DECAR</h2>
+                    <p style="margin:2px 0;">BODEGA DE SALDOS Y REMATES</p>
+                    <p style="margin:2px 0;">COMPROBANTE DE DEVOLUCIÓN / GARANTÍA</p>
+                    <p style="margin:2px 0;">--------------------------------</p>
+                    <p style="margin:2px 0;">FOLIO DEV: <b>${folioDev}</b></p>
+                    <p style="margin:2px 0;">VENTA ORIGEN: <b>${folioVenta}</b></p>
+                    <p style="margin:2px 0;">Fecha: ${fechaStr}</p>
+                    <p style="margin:2px 0;">--------------------------------</p>
+                </div>
+                <div style="font-family: monospace; font-size: 11px;">
+                    <p><b>MUEBLE:</b> ${prod.nombre}</p>
+                    <p><b>SKU:</b> ${prod.sku}</p>
+                    <p><b>ACCIÓN:</b> ${tipo}</p>
+                    <p><b>MOTIVO:</b> ${motivo}</p>
+                    ${tipo === 'Devolucion/Dinero' ? `<p><b>REEMBOLSO: $${monto.toFixed(2)}</b></p>` : '<p><b>ESTATUS:</b> ENTRADA A GARANTÍA / TALLER</p>'}
+                </div>
+            `;
+
+            const area = document.getElementById('area-impresion');
+            area.style.display = 'block';
+            area.innerHTML = html;
+            window.print();
+            area.style.display = 'none';
+        }
+
+        // APARTADOS
+        function exportarApartadosExcel(tipo) {
+            window.location.href = `/apartados/exportar-excel/?tipo=${tipo}`;
+        }
+
+        function renderTablaApartadosPOS(productos) {
+            const tbody = document.getElementById('tabla-productos-apartado-body');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            const prodList = productos || listaProductosGlobal;
+            prodList.forEach(p => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="p-2 font-mono font-bold">${p.sku}</td>
+                        <td class="p-2 font-bold">${p.nombre}</td>
+                        <td class="p-2 font-semibold text-gray-600">${p.marca || 'GENÉRICA'}</td>
+                        <td class="p-2 text-gray-600">${p.capacidad || '-'}</td>
+                        <td class="p-2 font-bold text-gray-800">$${p.precio_pvp.toFixed(2)}</td>
+                        <td class="p-2 font-bold ${p.stock > 0 ? 'text-gray-800' : 'text-red-600'}">${p.stock}</td>
+                        <td class="p-2 text-center">
+                            <button onclick="agregarAlCarritoApartado('${p.sku}')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-2 py-1 rounded text-xs ${p.stock <= 0 ? 'opacity-50 cursor-not-allowed' : ''}" ${p.stock <= 0 ? 'disabled' : ''}>
+                                + Agregar
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function filtrarCatalogoApartados(event) {
+            const q = document.getElementById('buscar-producto-apartado').value.toLowerCase().trim();
+
+            if (event && event.key === 'Enter') {
+                const prod = listaProductosGlobal.find(p => p.sku.toLowerCase() === q);
+                if (prod) {
+                    agregarAlCarritoApartado(prod.sku);
+                    document.getElementById('buscar-producto-apartado').value = '';
+                    renderTablaApartadosPOS(listaProductosGlobal);
+                    return;
+                }
+            }
+            
+            const filtrados = listaProductosGlobal.filter(p => 
+                p.nombre.toLowerCase().includes(q) || 
+                p.sku.toLowerCase().includes(q) ||
+                (p.marca && p.marca.toLowerCase().includes(q))
+            );
+            renderTablaApartadosPOS(filtrados);
+        }
+
+        function agregarAlCarritoApartado(sku) {
+            const prod = listaProductosGlobal.find(p => p.sku === sku);
+            if (!prod) return;
+
+            const unidadesEnCarrito = carritoApartados.filter(item => item.sku === sku).length;
+            if (unidadesEnCarrito + 1 > prod.stock) return alert(`Stock disponible máximo alcanzado (${prod.stock} disponibles).`);
+
+            carritoApartados.push({ ...prod, idUnico: Date.now() + Math.random(), precio_pactado: prod.precio_pvp });
+            renderCarritoApartados();
+        }
+
+        function renderCarritoApartados() {
+            const cont = document.getElementById('apt-carrito-items');
+            if (!cont) return;
+            cont.innerHTML = '';
+            let total = 0;
+
+            carritoApartados.forEach(i => {
+                total += i.precio_pactado;
+                cont.innerHTML += `
+                    <div class="flex justify-between items-center text-xs py-1 border-b">
+                        <div>
+                            <p class="font-bold text-gray-800">${i.nombre}</p>
+                            <p class="text-[10px] text-gray-500 font-mono">SKU: ${i.sku} | Marca: ${i.marca || 'GENÉRICA'}</p>
+                        </div>
+                        <div class="flex items-center space-x-1">
+                            <span class="font-bold text-blue-600">$</span>
+                            <input type="number" value="${i.precio_pactado}" onchange="modificarPrecioApartado(${i.idUnico}, this.value)" class="w-16 p-1 border rounded text-right font-bold">
+                            <button onclick="eliminarDelCarritoApartado(${i.idUnico})" class="text-white font-bold bg-red-500 hover:bg-red-700 px-2 py-0.5 rounded text-[10px]">✕</button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            document.getElementById('apt-total-muebles').innerText = `$${total.toFixed(2)}`;
+            document.getElementById('apt-pago-efec').value = total > 0 ? (total * 0.3).toFixed(2) : 0;
+        }
+
+        function modificarPrecioApartado(idUnico, nuevoPrecio) {
+            const item = carritoApartados.find(i => i.idUnico === idUnico);
+            if (item) {
+                item.precio_pactado = parseFloat(nuevoPrecio) || 0;
+                renderCarritoApartados();
+            }
+        }
+
+        function eliminarDelCarritoApartado(idUnico) {
+            carritoApartados = carritoApartados.filter(i => i.idUnico !== idUnico);
+            renderCarritoApartados();
+        }
+
+        async function procesarApartado() {
+            const cliente = document.getElementById('apt-cliente').value.trim();
+            const tel = document.getElementById('apt-telefono').value.trim();
+            const tipoAtencionElem = document.getElementById('apt-tipo-atencion');
+            const tipoAtencion = tipoAtencionElem ? tipoAtencionElem.value : "VendedorTienda";
+
+            if (carritoApartados.length === 0) return alert('Selecciona al menos un mueble para apartar.');
+            if (!cliente || !tel) return alert('El nombre del cliente y teléfono son obligatorios.');
+
+            const efec = parseFloat(document.getElementById('apt-pago-efec').value) || 0;
+            const tarj = parseFloat(document.getElementById('apt-pago-tarj').value) || 0;
+            const trans = parseFloat(document.getElementById('apt-pago-trans').value) || 0;
+
+            const payload = {
+                cliente_nombre: cliente,
+                cliente_telefono: tel,
+                tipo_atencion: tipoAtencion,
+                monto_efectivo: efec,
+                monto_tarjeta: tarj,
+                monto_transferencia: trans,
+                vendedor_id: usuarioActual.usuario_id,
+                items: carritoApartados.map(i => ({ sku: i.sku, cantidad: 1, precio_pactado: i.precio_pactado }))
+            };
+
+            try {
+                const res = await fetch('/apartados/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    alert(`¡APARTADO REGISTRADO EXITOSAMENTE!\nFolio: ${data.folio_apartado}\nSaldo Pendiente: $${data.saldo_pendiente.toFixed(2)}`);
+                    imprimirEstadoCuentaApartado(data.folio_apartado);
+                    carritoApartados = [];
+                    document.getElementById('apt-cliente').value = '';
+                    document.getElementById('apt-telefono').value = '';
+                    renderCarritoApartados();
+                    cargarProductos();
+                } else {
+                    alert(`Error: ${data.detail || 'No se pudo registrar el apartado.'}`);
+                }
+            } catch (err) {
+                alert(`Error de comunicación con el servidor: ${err.message}`);
+            }
+        }
+      function abrirModalHistorialApartados() {
+            document.getElementById('modal-historial-apartados').classList.remove('hidden');
+            document.getElementById('apt-tarjeta-abono').classList.add('hidden');
+            document.getElementById('apt-detalle-tarjeta').classList.add('hidden');
+            cargarHistorialApartadosTabla();
+        }
+
+        function cerrarModalHistorialApartados() {
+            document.getElementById('modal-historial-apartados').classList.add('hidden');
+        }
+
+        async function cargarHistorialApartadosTabla() {
+            const q = document.getElementById('apt-historial-input').value;
+            const fIni = document.getElementById('apt-fecha-inicio').value;
+            const fFin = document.getElementById('apt-fecha-fin').value;
+
+            try {
+                const res = await fetch(`/apartados/historial/?busqueda=${encodeURIComponent(q)}&fecha_inicio=${encodeURIComponent(fIni)}&fecha_fin=${encodeURIComponent(fFin)}`);
+                const datos = await res.json();
+                const tbody = document.getElementById('tabla-apartados-historial-body');
+                if (!tbody) return;
+                tbody.innerHTML = '';
+                
+                if (Array.isArray(datos)) {
+                    datos.forEach(a => {
+                        const totalNum = parseFloat(a.monto_total) || 0;
+                        const saldoNum = parseFloat(a.saldo_pendiente) || 0;
+                        const botonAbonar = (saldoNum > 0 && a.estatus !== 'Cancelado') 
+                            ? `<button onclick="prepararAbonoRapido('${a.folio}', '${a.cliente}', ${totalNum}, ${saldoNum})" class="bg-green-600 hover:bg-green-700 text-white font-bold px-2 py-0.5 rounded text-[10px]">
+                                💵 Abonar
+                               </button>`
+                            : `<span class="text-[10px] font-bold ${a.estatus === 'Liquidado' ? 'text-green-800 bg-green-100' : 'text-red-800 bg-red-100'} px-1.5 py-0.5 rounded">${a.estatus}</span>`;
+
+                        tbody.innerHTML += `
+                            <tr class="hover:bg-blue-50 cursor-pointer" onclick="verDetalleApartadoEnPantalla('${a.folio}')">
+                                <td class="p-2 font-mono font-bold text-blue-700">${a.folio}</td>
+                                <td class="p-2 font-mono text-gray-500">${(a.fecha || '').split(' ')[0]}</td>
+                                <td class="p-2 font-bold">${a.cliente}<br><span class="text-[10px] font-normal text-gray-400">${a.telefono}</span></td>
+                                <td class="p-2 font-bold text-gray-800">$${totalNum.toFixed(2)}</td>
+                                <td class="p-2 font-extrabold ${saldoNum > 0 ? 'text-red-600' : 'text-green-700'}">$${saldoNum.toFixed(2)}</td>
+                                <td class="p-2 text-center space-x-1" onclick="event.stopPropagation()">
+                                    <button onclick="verDetalleApartadoEnPantalla('${a.folio}')" class="bg-indigo-600 text-white font-bold px-2 py-0.5 rounded text-[10px]">
+                                        👁️ Ver Detalle
+                                    </button>
+                                    ${botonAbonar}
+                                    <button onclick="imprimirEstadoCuentaApartado('${a.folio}')" class="bg-blue-600 text-white font-bold px-2 py-0.5 rounded text-[10px]">
+                                        🖨️ Estado Cuenta
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                }
+            } catch (err) {
+                console.error("Error al cargar historial de apartados:", err);
+            }
+        }
+
+        async function verDetalleApartadoEnPantalla(folio) {
+            const res = await fetch(`/apartados/${folio}/estado-cuenta/`);
+            if (res.ok) {
+                const data = await res.json();
+                document.getElementById('det-apt-folio').innerText = `Contrato de Apartado: ${data.folio} (${data.estatus})`;
+                document.getElementById('det-apt-cliente').innerText = `Cliente: ${data.cliente} - Teléfono: ${data.telefono}`;
+                document.getElementById('det-apt-fecha').innerText = `Fecha Registro: ${data.fecha_inicio}`;
+                document.getElementById('det-apt-monto-total').innerText = `Total Venta: $${data.monto_total.toFixed(2)} | Abonado: $${data.monto_pagado.toFixed(2)}`;
+                document.getElementById('det-apt-saldo').innerText = `Saldo Pendiente: $${data.saldo_pendiente.toFixed(2)}`;
+
+                const listMuebles = document.getElementById('det-apt-muebles-list');
+                listMuebles.innerHTML = '';
+                data.muebles.forEach(m => {
+                    listMuebles.innerHTML += `
+                        <div class="flex justify-between items-center py-1 border-b border-gray-100 text-[11px]">
+                            <div>
+                                <p class="font-bold text-gray-800">${m.nombre}</p>
+                                <p class="text-[9px] text-gray-500 font-mono">SKU: ${m.sku} | Marca: ${m.marca || 'GENÉRICA'} | Cap: ${m.capacidad || '-'}</p>
+                            </div>
+                            <span class="font-bold text-blue-700">$${m.precio_pactado.toFixed(2)}</span>
+                        </div>
+                    `;
+                });
+
+                const listAbonos = document.getElementById('det-apt-abonos-list');
+                listAbonos.innerHTML = '';
+                data.abonos.forEach((a, idx) => {
+                    listAbonos.innerHTML += `
+                        <div class="flex justify-between items-center py-1 border-b border-gray-100 text-[11px]">
+                            <div>
+                                <p class="font-bold text-gray-800">${idx + 1}º Abono (${a.fecha.split(' ')[0]})</p>
+                                <p class="text-[9px] text-gray-500 font-mono">${a.metodo}</p>
+                            </div>
+                            <span class="font-bold text-green-700">$${a.monto.toFixed(2)}</span>
+                        </div>
+                    `;
+                });
+
+                document.getElementById('apt-detalle-tarjeta').classList.remove('hidden');
+            }
+        }
+
+        function prepararAbonoRapido(folio, cliente, montoTotal, saldoPendiente) {
+            apartadoSeleccionadoAbono = { folio, cliente, montoTotal, saldoPendiente };
+            document.getElementById('apt-card-folio').innerText = `Apartado: ${folio}`;
+            document.getElementById('apt-card-cliente').innerText = `Cliente: ${cliente}`;
+            document.getElementById('apt-card-monto-total').innerText = `Total Venta: $${montoTotal.toFixed(2)}`;
+            document.getElementById('apt-card-saldo').innerText = `Saldo Pendiente: $${saldoPendiente.toFixed(2)}`;
+            
+            document.getElementById('abono-efec').value = saldoPendiente;
+            document.getElementById('abono-tarj').value = 0;
+            document.getElementById('abono-trans').value = 0;
+            document.getElementById('apt-tarjeta-abono').classList.remove('hidden');
+        }
+
+        function cancelarAbonoRapido() {
+            apartadoSeleccionadoAbono = null;
+            document.getElementById('apt-tarjeta-abono').classList.add('hidden');
+        }
+
+        async function guardarAbonoRapido() {
+            if (!apartadoSeleccionadoAbono) return;
+
+            const efec = parseFloat(document.getElementById('abono-efec').value) || 0;
+            const tarj = parseFloat(document.getElementById('abono-tarj').value) || 0;
+            const trans = parseFloat(document.getElementById('abono-trans').value) || 0;
+
+            const payload = { monto_efectivo: efec, monto_tarjeta: tarj, monto_transferencia: trans };
+
+            const res = await fetch(`/apartados/${apartadoSeleccionadoAbono.folio}/abonos/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                alert(`¡ABONO REGISTRADO CON ÉXITO!\nFolio: ${data.folio}\nNuevo Saldo Pendiente: $${data.saldo_pendiente.toFixed(2)}`);
+                imprimirEstadoCuentaApartado(data.folio);
+                cancelarAbonoRapido();
+                cargarHistorialApartadosTabla();
+                cargarProductos();
+            } else {
+                const err = await res.json();
+                alert(`Error: ${err.detail}`);
+            }
+        }
+
+        async function imprimirEstadoCuentaApartado(folio) {
+            const res = await fetch(`/apartados/${folio}/estado-cuenta/`);
+            if (res.ok) {
+                const data = await res.json();
+                const fechaStr = new Date().toLocaleString();
+                let html = `
+                    <div style="text-align: center; font-family: monospace;">
+                        <h2 style="font-size: 14px; font-weight: bold; margin:0;">SALDOS Y REMATES DECAR</h2>
+                        <p style="margin:2px 0;">BODEGA DE SALDOS Y REMATES</p>
+                        <p style="margin:2px 0;">ESTADO DE CUENTA - APARTADO</p>
+                        <p style="margin:2px 0;">--------------------------------</p>
+                        <p style="margin:2px 0;">FOLIO APARTADO: <b>${data.folio}</b></p>
+                        <p style="margin:2px 0;">Cliente: ${data.cliente} (${data.telefono})</p>
+                        <p style="margin:2px 0;">Fecha Emisión: ${fechaStr}</p>
+                        <p style="margin:2px 0;">--------------------------------</p>
+                    </div>
+                    <div style="font-family: monospace; font-size: 11px;">
+                        <p><b>MUEBLES APARTADOS:</b></p>
+                `;
+
+                data.muebles.forEach(m => {
+                    html += `<p>- ${m.nombre} [${m.sku}] (Marca: ${m.marca || 'GENÉRICA'} | Cap: ${m.capacidad || '-'}): <b>$${m.precio_pactado.toFixed(2)}</b></p>`;
+                });
+
+                html += `<p style="margin-top:8px;"><b>HISTORIAL DE ABONOS RECIBIDOS:</b></p>`;
+                data.abonos.forEach((a, idx) => {
+                    html += `<p>${idx+1}. ${a.fecha.split(' ')[0]} - $${a.monto.toFixed(2)} (${a.metodo})</p>`;
+                });
+
+                html += `
+                    <div style="border-top:1px solid #000; margin-top:10px; padding-top:4px; font-weight:bold;">
+                        <p>MONTO TOTAL VENTA: $${data.monto_total.toFixed(2)}</p>
+                        <p>TOTAL ABONADO: $${data.monto_pagado.toFixed(2)}</p>
+                        <p style="font-size:13px; color:#c00;">SALDO PENDIENTE DE PAGO: $${data.saldo_pendiente.toFixed(2)}</p>
+                    </div>
+                    
+                    <div style="text-align: left; margin-top: 15px; border-top: 1px dashed #000; padding-top: 8px; font-size: 9px; font-family: monospace;">
+                        <p style="margin: 2px 0; font-weight: bold; text-align: center;">TÉRMINOS Y CONDICIONES</p>
+                        <p style="margin: 4px 0;">a) APLICAN 3 MESES DE GARANTIA SOLO EN LINEA BLANCA.</p>
+                        <p style="margin: 4px 0;">b) PARA APLICAR SU GARANTIA ES INDISPENSABLE PRESENTAR SU TICKET DE COMPRA.</p>
+                        <p style="margin: 4px 0;">c) LOS PRODUCTOS SE ENTREGAN EN TIENDA POR LO QUE CUALQUIER DAÑO EN EL PRODUCTO EN EL TRASLADO ES RESPONSABILIDAD DEL COMPRADOR.</p>
+                        <p style="margin: 4px 0;">d) PARA APARTADOS DEBERÁN DE LIQUIDAR SU SALDO PENDIENTE 15 DÍAS POSTERIORES A SU COMPRA.</p>
+                    </div>
+                `;
+
+                if (data.saldo_pendiente <= 0) {
+                    html += `
+                        <div style="text-align:center; border:2px solid #000; padding:5px; margin-top:10px; font-weight:bold;">
+                            ¡PRODUCTO LIQUIDADO!<br>YA PUEDES HACER LA ENTREGA DEL PRODUCTO
+                        </div>
+                    `;
+                }
+
+                const area = document.getElementById('area-impresion');
+                area.style.display = 'block';
+                area.innerHTML = html;
+                window.print();
+                area.style.display = 'none';
+            }
+        }
+
+        // GASTOS Y CAJA CHICA
+        async function abrirCajaChica() {
+            const montoVal = parseFloat(document.getElementById('caja-monto').value) || 0;
+            if (montoVal <= 0) return alert('Ingresa un monto válido para abrir la caja chica.');
+
+            try {
+                const res = await fetch('/caja/abrir/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ monto_inicial: montoVal })
+                });
+
+                const data = await res.json();
+                if (res.ok) {
+                    alert(data.mensaje);
+                    document.getElementById('caja-monto').value = '';
+                    cargarResumenGastos(periodoGastoActual);
+                } else {
+                    alert(`Error: ${data.detail}`);
+                }
+            } catch (err) {
+                alert(`Error de comunicación con el servidor: ${err.message}`);
+            }
+        }
+
+        async function cargarResumenGastos(periodo = 'semanal') {
+            periodoGastoActual = periodo;
+            ['diario', 'semanal', 'mensual'].forEach(p => {
+                const btn = document.getElementById(`btn-gasto-${p}`);
+                if (btn) btn.className = (p === periodo) 
+                    ? 'px-3 py-1.5 rounded text-xs font-bold bg-blue-600 text-white' 
+                    : 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
+            });
+
+            const res = await fetch(`/gastos/resumen/?periodo=${periodo}`);
+            if (res.ok) {
+                const data = await res.json();
+                document.getElementById('card-caja-inicial').innerText = `$${data.caja_inicial.toFixed(2)}`;
+                document.getElementById('card-comision-vendedor').innerText = `$${data.comision_vendedor_tienda.toFixed(2)}`;
+                document.getElementById('card-comision-comisionista').innerText = `$${data.comision_comisionista_redes.toFixed(2)}`;
+                document.getElementById('card-total-egresos').innerText = `$${data.total_egresos_reales.toFixed(2)}`;
+
+                const tbody = document.getElementById('tabla-gastos-body');
+                if (!tbody) return;
+                tbody.innerHTML = '';
+                data.lista_gastos.forEach(g => {
+                    const btnEdit = (usuarioActual && usuarioActual.rol === 'Maestro') 
+                        ? `<button onclick='abrirModalEditarGasto(${JSON.stringify(g)})' class="bg-amber-600 hover:bg-amber-700 text-white px-2 py-0.5 rounded text-[10px] font-bold">✏️ Editar</button>` : '-';
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-gray-50">
+                            <td class="p-2 font-mono text-gray-500">${g.fecha.split(' ')[0]}</td>
+                            <td class="p-2 font-semibold text-gray-800">${g.categoria}</td>
+                            <td class="p-2 text-gray-600">${g.concepto}</td>
+                            <td class="p-2 text-right font-bold text-red-600">$${g.monto.toFixed(2)}</td>
+                            <td class="p-2 text-center">${btnEdit}</td>
+                        </tr>
+                    `;
+                });
+            }
+        }
+
+        function abrirModalEditarGasto(g) {
+            if (usuarioActual.rol !== 'Maestro') return alert("Exclusivo Administrador Maestro.");
+            document.getElementById('edit-gasto-id').value = g.id;
+            document.getElementById('edit-gasto-cat').value = g.categoria;
+            document.getElementById('edit-gasto-concepto').value = g.concepto;
+            document.getElementById('edit-gasto-monto').value = g.monto;
+            document.getElementById('modal-editar-gasto').classList.remove('hidden');
+        }
+
+        function cerrarModalEditarGasto() {
+            document.getElementById('modal-editar-gasto').classList.add('hidden');
+        }
+
+        async function guardarEdicionGasto() {
+            const id = document.getElementById('edit-gasto-id').value;
+            const payload = {
+                categoria: document.getElementById('edit-gasto-cat').value,
+                concepto: document.getElementById('edit-gasto-concepto').value,
+                monto: parseFloat(document.getElementById('edit-gasto-monto').value) || 0
+            };
+            const res = await fetch(`/gastos/${id}/?rol_usuario=${usuarioActual.rol}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (res.ok) {
+                alert("¡Gasto actualizado por Administrador Maestro!");
+                cerrarModalEditarGasto();
+                cargarResumenGastos(periodoGastoActual);
+            } else {
+                alert("Error al guardar cambios de gasto.");
+            }
+        }
+
+        async function registrarGasto() {
+            const cat = document.getElementById('gasto-categoria').value;
+            const fechaVal = document.getElementById('gasto-fecha').value;
+            const conceptoVal = document.getElementById('gasto-concepto').value.trim();
+            const montoVal = parseFloat(document.getElementById('gasto-monto').value) || 0;
+
+            if (!conceptoVal) return alert('Ingresa una descripción del gasto.');
+            if (montoVal <= 0) return alert('Ingresa un monto válido mayor a $0.00');
+
+            const payload = { 
+                categoria: cat, 
+                fecha_gasto: fechaVal, 
+                concepto: conceptoVal, 
+                monto: montoVal, 
+                usuario_id: usuarioActual.usuario_id 
+            };
+
+            try {
+                const res = await fetch('/gastos/', { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify(payload) 
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    alert(data.mensaje);
+                    document.getElementById('gasto-concepto').value = '';
+                    document.getElementById('gasto-monto').value = '';
+                    cargarResumenGastos(periodoGastoActual);
+                } else {
+                    alert(`Error: ${data.detail}`);
+                }
+            } catch (err) {
+                alert(`Error de comunicación con el servidor: ${err.message}`);
+            }
+        }
+
+        // REPORTES FINANCIEROS Y BI
+        function mostrarTablaSubReporte(tipo) {
+            document.getElementById('contenedor-tabla-ventas').classList.add('hidden');
+            document.getElementById('contenedor-tabla-devoluciones').classList.add('hidden');
+            document.getElementById('contenedor-tabla-apartados').classList.add('hidden');
+            document.getElementById(`contenedor-tabla-${tipo}`).classList.remove('hidden');
+        }
+
+        function cambiarSubVistaReporte(subtipo) {
+            const btnArq = document.getElementById('btn-sub-arqueo');
+            const btnBI = document.getElementById('btn-sub-rentabilidad');
+            const secArq = document.getElementById('sub-reporte-arqueo');
+            const secBI = document.getElementById('sub-reporte-rentabilidad');
+
+            if (subtipo === 'arqueo') {
+                secArq.classList.remove('hidden');
+                secBI.classList.add('hidden');
+                btnArq.className = 'px-4 py-2 rounded text-xs font-bold bg-blue-600 text-white shadow';
+                btnBI.className = 'px-4 py-2 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-purple-100';
+                cargarReporteArqueo('semanal');
+            } else {
+                secArq.classList.add('hidden');
+                secBI.classList.remove('hidden');
+                btnBI.className = 'px-4 py-2 rounded text-xs font-bold bg-purple-700 text-white shadow';
+                btnArq.className = 'px-4 py-2 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-blue-100';
+            }
+        }
+
+        async function cargarReporteArqueo(periodo = 'semanal') {
+            ['diario', 'semanal', 'mensual'].forEach(p => {
+                const btn = document.getElementById(`btn-arq-${p}`);
+                if (btn) btn.className = (p === periodo) 
+                    ? 'px-3 py-1 rounded text-xs font-bold bg-blue-600 text-white' 
+                    : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
+            });
+
+            const res = await fetch(`/reportes/arqueo-corte/?periodo=${periodo}`);
+            if (res.ok) {
+                const data = await res.json();
+                
+                if (data.ventas_directas) {
+                    document.getElementById('rep-a-ventas-total').innerText = `$${data.ventas_directas.total.toFixed(2)}`;
+                    document.getElementById('rep-a-ventas-desglose').innerText = `Efec: $${data.ventas_directas.efectivo.toFixed(2)} | Tarj: $${data.ventas_directas.tarjeta.toFixed(2)} | Trans: $${data.ventas_directas.transferencia.toFixed(2)}`;
+                }
+                if (data.devoluciones) {
+                    document.getElementById('rep-b-dev-total').innerText = `$${data.devoluciones.monto_total.toFixed(2)}`;
+                    document.getElementById('rep-b-dev-num').innerText = `${data.devoluciones.cantidad} Devoluciones Registradas`;
+                }
+                if (data.apartados_abonos) {
+                    document.getElementById('rep-c-apt-total').innerText = `$${data.apartados_abonos.total.toFixed(2)}`;
+                    document.getElementById('rep-c-apt-desglose').innerText = `Efec: $${data.apartados_abonos.efectivo.toFixed(2)} | Tarj: $${data.apartados_abonos.tarjeta.toFixed(2)} | Trans: $${data.apartados_abonos.transferencia.toFixed(2)}`;
+                }
+
+                document.getElementById('arq-card-efectivo-ingresado').innerText = `$${data.efectivo_ingresado.toFixed(2)}`;
+                document.getElementById('arq-card-gastos').innerText = `$${data.total_gastos.toFixed(2)}`;
+                document.getElementById('arq-card-efectivo-neto').innerText = `$${data.efectivo_neto_caja.toFixed(2)}`;
+                document.getElementById('arq-card-digital').innerText = `$${(data.tarjeta_ingresada + data.transf_ingresada).toFixed(2)}`;
+
+                const tbVentas = document.getElementById('tabla-arqueo-semanal-body');
+                if (tbVentas) {
+                    tbVentas.innerHTML = '';
+                    data.tabla_filas.forEach(row => {
+                        tbVentas.innerHTML += `
+                            <tr class="hover:bg-blue-50">
+                                <td class="p-2.5 border font-bold">${row.dia}</td>
+                                <td class="p-2.5 border font-mono text-gray-600">${row.fecha}</td>
+                                <td class="p-2.5 border font-bold text-emerald-700 bg-emerald-50">$${row.monto_venta.toFixed(2)}</td>
+                                <td class="p-2.5 border">$${row.efectivo.toFixed(2)}</td>
+                                <td class="p-2.5 border">$${row.transferencia.toFixed(2)}</td>
+                                <td class="p-2.5 border">$${row.tarjeta.toFixed(2)}</td>
+                            </tr>
+                        `;
+                    });
+                }
+
+                const tbDev = document.getElementById('tabla-reporte-devoluciones-body');
+                if (tbDev && data.tabla_devoluciones) {
+                    tbDev.innerHTML = '';
+                    data.tabla_devoluciones.forEach(d => {
+                        tbDev.innerHTML += `<tr><td class="p-2.5 border font-bold text-red-800">${d.folio}</td><td class="p-2.5 border text-gray-600">${d.fecha}</td><td class="p-2.5 border font-mono">${d.sku}</td><td class="p-2.5 border text-red-600 font-bold">$${d.monto.toFixed(2)}</td></tr>`;
+                    });
+                }
+
+                const tbApt = document.getElementById('tabla-reporte-apartados-body');
+                if (tbApt && data.tabla_apartados) {
+                    tbApt.innerHTML = '';
+                    data.tabla_apartados.forEach(a => {
+                        tbApt.innerHTML += `<tr><td class="p-2.5 border font-bold text-green-800">${a.folio}</td><td class="p-2.5 border text-gray-600">${a.fecha}</td><td class="p-2.5 border">${a.metodo}</td><td class="p-2.5 border text-green-700 font-bold">$${a.monto.toFixed(2)}</td></tr>`;
+                    });
+                }
+            }
+        }
+
+        async function validarPinMaestroBI() {
+            const pin = document.getElementById('pin-maestro-input').value.trim();
+            if (!pin) return alert('Ingresa tu PIN Maestro.');
+
+            try {
+                const res = await fetch(`/reportes/analisis-rentabilidad/?pin_autorizador=${pin}&periodo=semanal`);
+                if (res.ok) {
+                    pinMaestroValidadoBI = pin;
+                    document.getElementById('panel-pin-maestro').classList.add('hidden');
+                    document.getElementById('panel-contenido-bi').classList.remove('hidden');
+                    renderizarReporteBI(await res.json());
+                } else {
+                    const err = await res.json();
+                    alert(`Error: ${err.detail}`);
+                }
+            } catch (err) {
+                alert(`Error de comunicación con el servidor: ${err.message}`);
+            }
+        }
+
+        async function cargarReporteBI(periodo = 'semanal') {
+            if (!pinMaestroValidadoBI) return;
+
+            ['diario', 'semanal', 'mensual'].forEach(p => {
+                const btn = document.getElementById(`btn-bi-${p}`);
+                if (btn) btn.className = (p === periodo) 
+                    ? 'px-3 py-1 rounded text-xs font-bold bg-purple-700 text-white' 
+                    : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
+            });
+
+            const res = await fetch(`/reportes/analisis-rentabilidad/?pin_autorizador=${pinMaestroValidadoBI}&periodo=${periodo}`);
+            if (res.ok) {
+                renderizarReporteBI(await res.json());
+            }
+        }
+
+        function renderizarReporteBI(data) {
+            document.getElementById('bi-card-cogs').innerText = `$${data.cogs_inversion.toFixed(2)}`;
+            document.getElementById('bi-card-bruta').innerText = `$${data.ganancia_bruta.toFixed(2)}`;
+            document.getElementById('bi-card-neta').innerText = `$${data.ganancia_neta_real.toFixed(2)}`;
+            document.getElementById('bi-card-roi').innerText = `${data.roi_porcentaje.toFixed(1)}%`;
+
+            const tbody = document.getElementById('tabla-bi-muebles-body');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            data.detalle_muebles.forEach(m => {
+                tbody.innerHTML += `
+                    <tr class="hover:bg-purple-50">
+                        <td class="p-2 border font-mono font-bold text-purple-900">${m.sku}</td>
+                        <td class="p-2 border font-bold text-gray-800">${m.nombre} <span class="text-[10px] text-gray-400 font-normal">(${m.tipo})</span></td>
+                        <td class="p-2 border text-center font-bold text-blue-700">${m.unidades}</td>
+                        <td class="p-2 border text-right font-bold">$${m.venta_total.toFixed(2)}</td>
+                        <td class="p-2 border text-right font-bold text-yellow-900 bg-yellow-50">$${m.inversion_cogs.toFixed(2)}</td>
+                        <td class="p-2 border text-right font-bold text-emerald-800 bg-emerald-50">$${m.ganancia_bruta.toFixed(2)}</td>
+                        <td class="p-2 border text-center font-extrabold text-purple-900 bg-purple-50">${m.roi_mueble.toFixed(1)}%</td>
+                    </tr>
+                `;
+            });
+        }
+
+        // INVENTARIO Y EDICIÓN MAESTRO
+        function renderTablaInventario() {
+            const tbody = document.getElementById('tabla-inventario-completo');
+            const thCosto = document.getElementById('th-costo-header');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            const esMaestro = usuarioActual && usuarioActual.rol === 'Maestro';
+            if (thCosto) thCosto.style.display = esMaestro ? '' : 'none';
+
+            listaProductosGlobal.forEach(p => {
+                const tdCosto = esMaestro ? `<td class="p-2 font-bold bg-yellow-50 text-yellow-900">$${p.costo_compra.toFixed(2)}</td>` : '';
+                const btnEdit = esMaestro ? `<button onclick='abrirModalEditarProducto(${JSON.stringify(p)})' class="bg-amber-600 hover:bg-amber-700 text-white px-2 py-0.5 rounded text-[10px] font-bold">✏️ Editar</button>` : '-';
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="p-2 font-mono font-bold">${p.sku}</td>
+                        <td class="p-2">${p.tipo}</td>
+                        <td class="p-2 font-bold">${p.nombre}</td>
+                        <td class="p-2">${p.marca}</td>
+                        <td class="p-2">${p.capacidad}</td>
+                        <td class="p-2">${p.unidad_medida}</td>
+                        <td class="p-2">${p.observaciones}</td>
+                        ${tdCosto}
+                        <td class="p-2 font-bold text-blue-600">$${p.precio_mayoreo.toFixed(2)}</td>
+                        <td class="p-2 text-xs text-blue-800">$${p.precio_minimo_mayoreo.toFixed(2)}</td>
+                        <td class="p-2 font-bold text-gray-800">$${p.precio_pvp.toFixed(2)}</td>
+                        <td class="p-2 text-xs text-red-600 font-bold">$${p.precio_minimo_pvp.toFixed(2)}</td>
+                        <td class="p-2 font-bold text-center ${p.stock > 0 ? 'text-green-700' : 'text-red-600'}">${p.stock}</td>
+                        <td class="p-2 text-center bg-amber-50 font-bold">${p.stock_apartado}</td>
+                        <td class="p-2 text-center bg-red-50 font-bold">${p.stock_garantia}</td>
+                        <td class="p-2 text-center">${btnEdit}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        function filtrarTablaInventario() {
+            const q = document.getElementById('inventario-buscar-input').value.toLowerCase().trim();
+            const tbody = document.getElementById('tabla-inventario-completo');
+            const thCosto = document.getElementById('th-costo-header');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            const esMaestro = usuarioActual && usuarioActual.rol === 'Maestro';
+            if (thCosto) thCosto.style.display = esMaestro ? '' : 'none';
+
+            const filtrados = listaProductosGlobal.filter(p => 
+                p.nombre.toLowerCase().includes(q) || 
+                p.sku.toLowerCase().includes(q) ||
+                (p.marca && p.marca.toLowerCase().includes(q)) ||
+                (p.capacidad && p.capacidad.toLowerCase().includes(q))
+            );
+
+            filtrados.forEach(p => {
+                const tdCosto = esMaestro ? `<td class="p-2 font-bold bg-yellow-50 text-yellow-900">$${p.costo_compra.toFixed(2)}</td>` : '';
+                const btnEdit = esMaestro ? `<button onclick='abrirModalEditarProducto(${JSON.stringify(p)})' class="bg-amber-600 hover:bg-amber-700 text-white px-2 py-0.5 rounded text-[10px] font-bold">✏️ Editar</button>` : '-';
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="p-2 font-mono font-bold">${p.sku}</td>
+                        <td class="p-2">${p.tipo}</td>
+                        <td class="p-2 font-bold">${p.nombre}</td>
+                        <td class="p-2">${p.marca}</td>
+                        <td class="p-2">${p.capacidad}</td>
+                        <td class="p-2">${p.unidad_medida}</td>
+                        <td class="p-2">${p.observaciones}</td>
+                        ${tdCosto}
+                        <td class="p-2 font-bold text-blue-600">$${p.precio_mayoreo.toFixed(2)}</td>
+                        <td class="p-2 text-xs text-blue-800">$${p.precio_minimo_mayoreo.toFixed(2)}</td>
+                        <td class="p-2 font-bold text-gray-800">$${p.precio_pvp.toFixed(2)}</td>
+                        <td class="p-2 text-xs text-red-600 font-bold">$${p.precio_minimo_pvp.toFixed(2)}</td>
+                        <td class="p-2 font-bold text-center ${p.stock > 0 ? 'text-green-700' : 'text-red-600'}">${p.stock}</td>
+                        <td class="p-2 text-center bg-amber-50 font-bold">${p.stock_apartado}</td>
+                        <td class="p-2 text-center bg-red-50 font-bold">${p.stock_garantia}</td>
+                        <td class="p-2 text-center">${btnEdit}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        function abrirModalEditarProducto(p) {
+            if (usuarioActual.rol !== 'Maestro') return alert("Exclusivo Administrador Maestro.");
+            document.getElementById('edit-prod-id').value = p.id;
+            document.getElementById('edit-prod-nombre').value = p.nombre;
+            document.getElementById('edit-prod-tipo').value = p.tipo;
+            document.getElementById('edit-prod-marca').value = p.marca;
+            document.getElementById('edit-prod-capacidad').value = p.capacidad;
+            document.getElementById('edit-prod-um').value = p.unidad_medida;
+            document.getElementById('edit-prod-obs').value = p.observaciones;
+            document.getElementById('edit-prod-costo').value = p.costo_compra;
+            document.getElementById('edit-prod-pvp').value = p.precio_pvp;
+            document.getElementById('edit-prod-pvm').value = p.precio_mayoreo;
+            document.getElementById('edit-prod-stock').value = p.stock;
+            document.getElementById('modal-editar-producto').classList.remove('hidden');
+        }
+
+        function cerrarModalEditarProducto() {
+            document.getElementById('modal-editar-producto').classList.add('hidden');
+        }
+
+        async function guardarEdicionProducto() {
+            const id = document.getElementById('edit-prod-id').value;
+            const pvpVal = parseFloat(document.getElementById('edit-prod-pvp').value) || 0;
+            const pvmVal = parseFloat(document.getElementById('edit-prod-pvm').value) || 0;
+            const payload = {
+                nombre: document.getElementById('edit-prod-nombre').value,
+                tipo: document.getElementById('edit-prod-tipo').value,
+                marca: document.getElementById('edit-prod-marca').value,
+                capacidad: document.getElementById('edit-prod-capacidad').value,
+                unidad_medida: document.getElementById('edit-prod-um').value,
+                observaciones_saldo: document.getElementById('edit-prod-obs').value,
+                costo_compra: parseFloat(document.getElementById('edit-prod-costo').value) || 0,
+                precio_pvp: pvpVal,
+                precio_minimo_pvp: pvpVal,
+                precio_mayoreo: pvmVal,
+                precio_minimo_mayoreo: pvmVal,
+                stock: parseInt(document.getElementById('edit-prod-stock').value) || 0
+            };
+
+            const res = await fetch(`/productos/${id}/?rol_usuario=${usuarioActual.rol}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (res.ok) {
+                alert("¡Producto actualizado exitosamente por el Administrador Maestro!");
+                cerrarModalEditarProducto();
+                cargarProductos();
+            } else {
+                alert("Error al editar producto.");
+            }
+        }
+
+        function abrirModalIndividual() {
+            document.getElementById('modal-producto-individual').classList.remove('hidden');
+        }
+
+        function cerrarModalIndividual() {
+            document.getElementById('modal-producto-individual').classList.add('hidden');
+        }
+
+        async function guardarProductoIndividual() {
+            const payload = {
+                sku: document.getElementById('ind-sku').value,
+                tipo: document.getElementById('ind-tipo').value,
+                nombre: document.getElementById('ind-nombre').value,
+                marca: document.getElementById('ind-marca').value,
+                stock: parseInt(document.getElementById('ind-stock').value) || 1,
+                costo_compra: parseFloat(document.getElementById('ind-costo').value) || 0,
+                precio_pvp: parseFloat(document.getElementById('ind-pvp').value) || 0
+            };
+
+            const res = await fetch('/productos/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                alert(`¡Producto registrado!\nSKU: ${data.sku}`);
+                cerrarModalIndividual();
+                cargarProductos();
+            } else {
+                const err = await res.json();
+                alert(`Error: ${err.detail}`);
+            }
+        }
+
+        async function subirExcel() {
+            const input = document.getElementById('archivo-excel');
+            if (input.files.length === 0) return alert('Selecciona un archivo Excel.');
+
+            const formData = new FormData();
+            formData.append('file', input.files[0]);
+            formData.append('modo_carga', 'acumular');
+
+            const res = await fetch('/productos/cargar-excel/', { method: 'POST', body: formData });
+            const data = await res.json();
+            
+            if (res.ok) {
+                alert(`¡Carga masiva completada con éxito!\n${data.mensaje}`);
+                cargarProductos();
+            } else {
+                alert(`Error: ${data.detail}`);
+            }
+        }
+
+        async function descargarExcelInventario() {
+            const res = await fetch(`/productos/descargar-excel/?rol_usuario=${usuarioActual.rol}`);
+            if (res.ok) {
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Inventario_DECAR_Pachuca_${usuarioActual.rol}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            }
+        }
+
+        async function limpiarTodoElSistema() {
+            const pin = prompt("🔒 SEGURIDAD CRÍTICA: Ingrese el PIN de Administrador Maestro para autorizar la LIMPIEZA TOTAL del sistema:");
+            if (!pin) return;
+
+            const res = await fetch(`/sistema/limpiar-todo/?rol_usuario=${usuarioActual.rol}&pin_maestro=${pin}`, { method: 'DELETE' });
+            if (res.ok) {
+                alert("Sistema reiniciado limpiamente.");
+                cargarProductos();
+            } else {
+                const data = await res.json();
+                alert(`Operación Denegada: ${data.detail || 'PIN incorrecto.'}`);
+            }
+        }
+    </script>
+</body>
+</html>
