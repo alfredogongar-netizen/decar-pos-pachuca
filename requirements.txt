@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pandas
+openpyxl
+python-barcode
+pillow
+pydantic
+apscheduler
+libsql-experimental
+python-multipart
